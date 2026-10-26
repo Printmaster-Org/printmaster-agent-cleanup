@@ -1,0 +1,5 @@
+/agent-cleanup
+/agent-cleanup.exe
+/dist/
+*.test
+.DS_Store
