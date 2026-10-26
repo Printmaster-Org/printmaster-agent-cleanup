@@ -7,6 +7,7 @@ The utility removes only Agent-owned services, package registrations, installer 
 ## Safety model
 
 - Launch with no arguments to open the GUI. The first operation is a read-only scan.
+- The Windows GUI requests Administrator access with a UAC prompt before starting its machine-wide inventory scan. Declining cancels startup without scanning.
 - Review the recognized install paths and evidence before selecting removal.
 - Unknown Agent-named services, processes, or Windows uninstall entries are report-only and block all removal until reviewed by the owner.
 - Removal requires Administrator/root privileges and an explicit confirmation.
@@ -54,7 +55,7 @@ On headless Linux development environments without CGO or graphics libraries, Fy
 CGO_ENABLED=0 go test -tags ci ./...
 ```
 
-Native release builds are made on Windows, Linux, and macOS runners. Release assets are named by platform and architecture, and `SHA256SUMS` is published alongside them.
+Native release builds are made on Windows, Linux, and macOS runners. Release assets are named by platform and architecture, and `SHA256SUMS` is published alongside them. Windows releases provide a windowed `agent-cleanup-windows-amd64.exe` GUI and a separate `agent-cleanup-cli-windows-amd64.exe` console executable.
 
 ## Recovery notes
 

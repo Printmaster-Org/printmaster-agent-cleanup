@@ -55,7 +55,12 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o "dist/agent-cleanup-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}" ./cmd/agent-cleanup
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            go build -trimpath -ldflags="-H=windowsgui -s -w -X main.defaultMode=gui" -o "dist/agent-cleanup-windows-amd64.exe" ./cmd/agent-cleanup
+            go build -trimpath -ldflags="-s -w -X main.defaultMode=cli" -o "dist/agent-cleanup-cli-windows-amd64.exe" ./cmd/agent-cleanup
+          else
+            go build -trimpath -ldflags="-s -w" -o "dist/agent-cleanup-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}" ./cmd/agent-cleanup
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: agent-cleanup-${{ matrix.goos }}-${{ matrix.goarch }}

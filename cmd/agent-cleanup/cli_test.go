@@ -39,6 +39,15 @@ func TestScanIsReadOnlyAndReportsUnknowns(t *testing.T) {
 	}
 }
 
+func TestGUIAndCLIEntryModes(t *testing.T) {
+	if !shouldOpenGUI(nil, "gui") || !shouldOpenGUI([]string{"--gui"}, "gui") {
+		t.Fatal("GUI default and explicit GUI mode should open the wizard")
+	}
+	if shouldOpenGUI(nil, "cli") || shouldOpenGUI([]string{"scan"}, "gui") {
+		t.Fatal("CLI mode or an explicit CLI command must not open the GUI")
+	}
+}
+
 func TestRemoveRequiresYesAndElevation(t *testing.T) {
 	backend := &testBackend{elevated: true, inventory: cleanup.Inventory{Platform: cleanup.PlatformLinux, Installations: []cleanup.Installation{{
 		LayoutID: "direct", Method: cleanup.MethodRawBinary, Executables: []string{"/usr/local/bin/printmaster-agent"},
