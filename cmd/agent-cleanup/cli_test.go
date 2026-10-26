@@ -48,6 +48,26 @@ func TestGUIAndCLIEntryModes(t *testing.T) {
 	}
 }
 
+func TestHelpTextDescribesDefaultLaunchMode(t *testing.T) {
+	var output strings.Builder
+	defaultMode = "gui"
+	if err := runCLI([]string{"help"}, &testBackend{}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "No arguments opens the graphical cleanup wizard.") {
+		t.Fatal("GUI help does not describe the default launch")
+	}
+	output.Reset()
+	defaultMode = "cli"
+	if err := runCLI([]string{"help"}, &testBackend{}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "No arguments displays this help.") {
+		t.Fatal("CLI help does not describe the default launch")
+	}
+	defaultMode = "gui"
+}
+
 func TestRemoveRequiresYesAndElevation(t *testing.T) {
 	backend := &testBackend{elevated: true, inventory: cleanup.Inventory{Platform: cleanup.PlatformLinux, Installations: []cleanup.Installation{{
 		LayoutID: "direct", Method: cleanup.MethodRawBinary, Executables: []string{"/usr/local/bin/printmaster-agent"},

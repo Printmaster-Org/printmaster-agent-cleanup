@@ -14,9 +14,13 @@ import (
 
 func runCLI(args []string, backend cleanup.Backend, output io.Writer) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprintln(output, `PrintMaster Agent Cleanup
+		defaultLaunch := "No arguments opens the graphical cleanup wizard."
+		if defaultMode == "cli" {
+			defaultLaunch = "No arguments displays this help."
+		}
+		fmt.Fprintf(output, `PrintMaster Agent Cleanup
 
-No arguments opens the graphical cleanup wizard.
+%s
 
 Usage:
   agent-cleanup scan [--json]
@@ -24,7 +28,7 @@ Usage:
   agent-cleanup remove --yes [--purge-data]
 
 Removal requires Administrator/root. Unknown entries are report-only and block cleanup.
-Data purge is separate and never selected by default.`)
+Data purge is separate and never selected by default.`, defaultLaunch)
 		return nil
 	}
 	command := args[0]
