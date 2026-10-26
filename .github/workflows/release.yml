@@ -38,7 +38,9 @@ jobs:
           cache: true
       - name: Install Linux graphics dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols libdecor-0-dev
       - name: Install Windows C compiler
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2

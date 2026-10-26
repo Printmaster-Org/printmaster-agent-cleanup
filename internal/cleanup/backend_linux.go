@@ -348,16 +348,21 @@ func findLinuxAgentProcesses(ctx context.Context) ([]Process, error) {
 			continue
 		}
 		name := strings.TrimSpace(string(commBytes))
-		if !strings.Contains(strings.ToLower(name), "printmaster-agent") {
-			continue
-		}
 		path, err := os.Readlink(filepath.Join(base, "exe"))
 		if err == nil {
 			path = strings.TrimSuffix(path, " (deleted)")
 		}
+		if !isLinuxAgentProcess(name, path) {
+			continue
+		}
 		processes = append(processes, Process{PID: uint32(pid64), Name: name, Path: path})
 	}
 	return processes, nil
+}
+
+func isLinuxAgentProcess(name, path string) bool {
+	return strings.Contains(strings.ToLower(name), "printmaster-agent") ||
+		isKnownLinuxExecutable(path, knownLinuxExecutablePaths())
 }
 
 func stopLinuxProcess(ctx context.Context, rawPID, expectedPath string) error {

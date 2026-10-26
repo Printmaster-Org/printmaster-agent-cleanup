@@ -25,3 +25,14 @@ func TestWindowsPurgePathsAreExactAndScoped(t *testing.T) {
 		t.Fatal("shared PrintMaster data root must not be purgeable")
 	}
 }
+
+func TestWindowsServiceExecutableParsesQuotedPathAndArguments(t *testing.T) {
+	got, err := windowsServiceExecutable(`"C:\Program Files\PrintMaster\Agent\printmaster-agent.exe" --service run`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `C:\Program Files\PrintMaster\Agent\printmaster-agent.exe`
+	if got != want {
+		t.Fatalf("service executable = %q, want %q", got, want)
+	}
+}

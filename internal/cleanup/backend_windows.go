@@ -351,11 +351,15 @@ func inspectAgentService() (*windowsService, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("read Agent service configuration: %w", err)
 	}
+	executable, err := windowsServiceExecutable(config.BinaryPathName)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse Agent service executable: %w", err)
+	}
 	status, err := service.Query()
 	if err != nil {
 		return nil, "", fmt.Errorf("read Agent service status: %w", err)
 	}
-	return &windowsService{state: status.State, path: config.BinaryPathName}, config.BinaryPathName, nil
+	return &windowsService{state: status.State, path: executable}, executable, nil
 }
 
 func stopWindowsService(ctx context.Context, name string) error {
@@ -436,14 +440,29 @@ func validateWindowsService(service *mgr.Service) error {
 	if err != nil {
 		return fmt.Errorf("read Agent service configuration before mutation: %w", err)
 	}
+	executable, err := windowsServiceExecutable(config.BinaryPathName)
+	if err != nil {
+		return fmt.Errorf("parse Agent service executable before mutation: %w", err)
+	}
 	roots, err := windowsRoots()
 	if err != nil {
 		return err
 	}
-	if !isKnownWindowsExecutable(config.BinaryPathName, roots) {
-		return fmt.Errorf("Agent service executable changed to an unknown path; refusing service mutation: %s", config.BinaryPathName)
+	if !isKnownWindowsExecutable(executable, roots) {
+		return fmt.Errorf("Agent service executable changed to an unknown path; refusing service mutation: %s", executable)
 	}
 	return nil
+}
+
+func windowsServiceExecutable(binaryPath string) (string, error) {
+	arguments, err := windows.DecomposeCommandLine(binaryPath)
+	if err != nil {
+		return "", err
+	}
+	if len(arguments) == 0 || arguments[0] == "" {
+		return "", fmt.Errorf("service command line has no executable")
+	}
+	return arguments[0], nil
 }
 
 func uninstallMSI(ctx context.Context, productCode string) error {

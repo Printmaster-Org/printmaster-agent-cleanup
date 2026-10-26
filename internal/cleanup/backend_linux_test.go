@@ -41,3 +41,20 @@ func TestLinuxRegularFileRemovalRejectsSymlink(t *testing.T) {
 		t.Fatalf("symlink target was altered: %v", err)
 	}
 }
+
+func TestLinuxAgentProcessDetectionHandlesTruncatedNamesAndLegacyBinary(t *testing.T) {
+	cases := []struct {
+		name, path string
+		want       bool
+	}{
+		{"printmaster-agen", "/usr/bin/printmaster-agent", true},
+		{"pm-agent", "/usr/local/bin/pm-agent", true},
+		{"other", "/tmp/printmaster-agent", false},
+		{"printmaster-agent", "", true},
+	}
+	for _, test := range cases {
+		if got := isLinuxAgentProcess(test.name, test.path); got != test.want {
+			t.Errorf("isLinuxAgentProcess(%q, %q) = %t, want %t", test.name, test.path, got, test.want)
+		}
+	}
+}
