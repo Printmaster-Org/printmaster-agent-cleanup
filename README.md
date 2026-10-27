@@ -80,4 +80,5 @@ Native release builds are made on Windows, Linux, and macOS runners. Release ass
 - Removing the Agent does not remove its configuration or state by default. A fresh install may reuse the existing identity and update-trust state.
 - Purging state is irreversible. Export any needed diagnostics and preserve required identity before selecting it.
 - Unknown entries should be investigated with their owning installer or service configuration. Do not broaden the allowlists merely to make an unfamiliar installation removable.
+- Windows service shutdown can finish an inventoried Agent process before its stop-process action runs. An already exited process needs no termination; failures against a still-running process remain explicit. If removal fails, copy the result (including the action and target), return to start, and rescan before retrying.
 - The tool does not delete the shared `/var/lib/printmaster` root, shared PrintMaster accounts, Server data, or arbitrary user directories.

@@ -254,7 +254,7 @@ func stopWindowsProcess(ctx context.Context, rawPID, expectedPath string) error 
 	if _, err := fmt.Sscanf(rawPID, "%d", &pid); err != nil || pid == 0 {
 		return fmt.Errorf("invalid Agent process ID %q", rawPID)
 	}
-	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, pid)
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, pid)
 	if err != nil {
 		if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
 			return nil
@@ -262,9 +262,18 @@ func stopWindowsProcess(ctx context.Context, rawPID, expectedPath string) error 
 		return fmt.Errorf("open Agent process %d: %w", pid, err)
 	}
 	defer windows.CloseHandle(handle)
+	exited, err := windowsProcessExited(handle)
+	if err != nil || exited {
+		return err
+	}
 	buffer := make([]uint16, 32768)
 	length := uint32(len(buffer))
 	if err := windows.QueryFullProcessImageName(handle, 0, &buffer[0], &length); err != nil {
+		if exited, queryErr := windowsProcessExited(handle); queryErr != nil {
+			return errors.Join(fmt.Errorf("verify Agent process %d path: %w", pid, err), queryErr)
+		} else if exited {
+			return nil
+		}
 		return fmt.Errorf("verify Agent process %d path: %w", pid, err)
 	}
 	path := windows.UTF16ToString(buffer[:length])
@@ -274,7 +283,23 @@ func stopWindowsProcess(ctx context.Context, rawPID, expectedPath string) error 
 	if expectedPath == "" || !strings.EqualFold(filepath.Clean(path), filepath.Clean(expectedPath)) {
 		return fmt.Errorf("process %d no longer matches the scanned executable; refusing to stop it", pid)
 	}
-	if err := windows.TerminateProcess(handle, 1); err != nil {
+	terminateHandle, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, pid)
+	if err != nil {
+		if exited, queryErr := windowsProcessExited(handle); queryErr != nil {
+			return errors.Join(fmt.Errorf("open Agent process %d for termination: %w", pid, err), queryErr)
+		} else if exited {
+			return nil
+		}
+		return fmt.Errorf("open Agent process %d for termination: %w", pid, err)
+	}
+	defer windows.CloseHandle(terminateHandle)
+	if err := windows.TerminateProcess(terminateHandle, 1); err != nil {
+		// Stopping the service can finish this process between the scan and termination.
+		if exited, queryErr := windowsProcessExited(handle); queryErr != nil {
+			return errors.Join(fmt.Errorf("stop Agent process %d: %w", pid, err), queryErr)
+		} else if exited {
+			return nil
+		}
 		return fmt.Errorf("stop Agent process %d: %w", pid, err)
 	}
 	deadline := time.Now().Add(30 * time.Second)
@@ -291,6 +316,14 @@ func stopWindowsProcess(ctx context.Context, rawPID, expectedPath string) error 
 		}
 	}
 	return fmt.Errorf("Agent process %d did not exit within 30 seconds", pid)
+}
+
+func windowsProcessExited(handle windows.Handle) (bool, error) {
+	result, err := windows.WaitForSingleObject(handle, 0)
+	if err != nil {
+		return false, fmt.Errorf("check whether Agent process exited: %w", err)
+	}
+	return result == windows.WAIT_OBJECT_0, nil
 }
 
 type msiProduct struct {
