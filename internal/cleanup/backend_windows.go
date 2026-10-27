@@ -209,6 +209,9 @@ func (windowsBackend) Scan(ctx context.Context) (Inventory, error) {
 			})
 		}
 	}
+	if err := inventoryWindowsRemnants(&inventory, programData); err != nil {
+		return Inventory{}, err
+	}
 	return inventory, nil
 }
 
@@ -229,6 +232,8 @@ func (windowsBackend) Execute(ctx context.Context, action Action) error {
 		return uninstallMSI(ctx, action.Target)
 	case ActionRemoveExecutable:
 		return removeKnownExecutable(action.Target)
+	case ActionRemoveEmptyDirectory:
+		return removeWindowsBootstrapDirectory(action.Target)
 	case ActionPurgeConfig:
 		if !isKnownWindowsConfigPath(action.Target) {
 			return fmt.Errorf("refusing unrecognized Agent configuration path %q", action.Target)

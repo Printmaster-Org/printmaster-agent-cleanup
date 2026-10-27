@@ -86,6 +86,9 @@ func BuildPlan(inventory Inventory, purgeData bool) (Plan, error) {
 				add(install, ActionPurgeLogs, logs, "explicit purge of Agent logs", true)
 			}
 		}
+		for _, directory := range install.EmptyDirectories {
+			add(install, ActionRemoveEmptyDirectory, directory, "remove the known bootstrap directory only if empty; never delete remaining files", true)
+		}
 	}
 	if len(inventory.Unrecognized) > 0 {
 		plan.Warnings = append(plan.Warnings, "unrecognized entries are report-only and require owner review")
@@ -116,6 +119,8 @@ func actionOrder(kind ActionKind) int {
 		return 7
 	case ActionPurgeLogs:
 		return 8
+	case ActionRemoveEmptyDirectory:
+		return 9
 	default:
 		return 100
 	}

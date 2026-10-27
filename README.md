@@ -74,6 +74,7 @@ Native release builds are made on Windows, Linux, and macOS runners. Release ass
 
 ## Recovery notes
 
+- On Windows, leftover machine-wide Agent data is listed even after the executable is gone; select **Permanently purge Agent data** only when an irreversible reset is intended. An empty `%ProgramData%\PrintMaster\bin` directory is also recoverable because the fresh-install bootstrap refuses even an empty directory. Directory removal is non-recursive and refuses linked paths or remaining files; unrecognized/shared contents are reported rather than deleted.
 - Removing the Agent does not remove its configuration or state by default. A fresh install may reuse the existing identity and update-trust state.
 - Purging state is irreversible. Export any needed diagnostics and preserve required identity before selecting it.
 - Unknown entries should be investigated with their owning installer or service configuration. Do not broaden the allowlists merely to make an unfamiliar installation removable.

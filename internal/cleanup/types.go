@@ -46,21 +46,22 @@ type Layout struct {
 
 // Installation is evidence that a known Agent layout exists on the host.
 type Installation struct {
-	LayoutID       string    `json:"layout_id"`
-	Version        string    `json:"version,omitempty"`
-	Method         Method    `json:"method"`
-	PackageName    string    `json:"package_name,omitempty"`
-	MSIProductCode string    `json:"msi_product_code,omitempty"`
-	ServiceName    string    `json:"service_name,omitempty"`
-	ServiceScope   string    `json:"service_scope,omitempty"`
-	ServicePlist   string    `json:"service_plist,omitempty"`
-	UninstallKey   string    `json:"uninstall_key,omitempty"`
-	Executables    []string  `json:"executables,omitempty"`
-	Processes      []Process `json:"processes,omitempty"`
-	ConfigPaths    []string  `json:"config_paths,omitempty"`
-	DataPaths      []string  `json:"data_paths,omitempty"`
-	LogPaths       []string  `json:"log_paths,omitempty"`
-	Evidence       []string  `json:"evidence,omitempty"`
+	LayoutID         string    `json:"layout_id"`
+	Version          string    `json:"version,omitempty"`
+	Method           Method    `json:"method"`
+	PackageName      string    `json:"package_name,omitempty"`
+	MSIProductCode   string    `json:"msi_product_code,omitempty"`
+	ServiceName      string    `json:"service_name,omitempty"`
+	ServiceScope     string    `json:"service_scope,omitempty"`
+	ServicePlist     string    `json:"service_plist,omitempty"`
+	UninstallKey     string    `json:"uninstall_key,omitempty"`
+	Executables      []string  `json:"executables,omitempty"`
+	EmptyDirectories []string  `json:"empty_directories,omitempty"`
+	Processes        []Process `json:"processes,omitempty"`
+	ConfigPaths      []string  `json:"config_paths,omitempty"`
+	DataPaths        []string  `json:"data_paths,omitempty"`
+	LogPaths         []string  `json:"log_paths,omitempty"`
+	Evidence         []string  `json:"evidence,omitempty"`
 }
 
 type Process struct {
@@ -97,6 +98,7 @@ const (
 	ActionRemoveService        ActionKind = "remove-service"
 	ActionRemoveUninstallEntry ActionKind = "remove-uninstall-entry"
 	ActionRemoveExecutable     ActionKind = "remove-executable"
+	ActionRemoveEmptyDirectory ActionKind = "remove-empty-directory"
 	ActionPurgeConfig          ActionKind = "purge-config"
 	ActionPurgeData            ActionKind = "purge-data"
 	ActionPurgeLogs            ActionKind = "purge-logs"
