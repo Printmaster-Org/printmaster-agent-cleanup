@@ -319,7 +319,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 		if len(current.Installations) == 0 || len(current.Unrecognized) > 0 || !backend.IsElevated() {
 			dataCheck.Disable()
 		}
-		dataPolicy := section("Keep your data", "Data is preserved by default. Purge permanently deletes Agent configuration, identity, databases, credentials, logs, and update trust.", dataCheck)
+		dataPolicy := newDataCautionPanel(dataCheck)
 		content := container.NewVBox(installList)
 		if len(current.Unrecognized) > 0 {
 			content.Add(widget.NewLabelWithStyle("Unrecognized entries · removal blocked", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
