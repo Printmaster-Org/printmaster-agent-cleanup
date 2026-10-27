@@ -6,16 +6,31 @@ The utility removes only Agent-owned services, package registrations, installer 
 
 ## Safety model
 
-- Launch with no arguments to open the GUI. The first operation is a read-only scan.
+- Launch with no arguments to open the GUI at the Scan welcome screen. Click **Scan this device** to begin a read-only scan; opening the window does not scan automatically.
 - The Windows GUI requests Administrator access with a UAC prompt before starting its machine-wide inventory scan. Declining cancels startup without scanning.
 - Review the recognized install paths and evidence before selecting removal.
 - Unknown Agent-named services, processes, or Windows uninstall entries are report-only and block all removal until reviewed by the owner.
 - Removal requires Administrator/root privileges and an explicit confirmation.
-- Purging Agent data is a separate opt-in. The GUI requires typing `PURGE PRINTMASTER AGENT DATA`; the CLI requires `--purge-data` in addition to `--yes`.
+- Purging Agent data is a separate opt-in. For all GUI removals, review the plan and hold **Hold to Confirm** (or focus it and hold Space) for 3 seconds. Removal starts automatically when the button fills; releasing is not required and there is no follow-up popup. The button fills from left to right while held; releasing early, moving off the button, losing focus, or going back resets it. The CLI requires `--purge-data` in addition to `--yes`.
 - Each purge target is checked against a platform-specific allowlist. Symlinks and linked descendants are refused.
 - Package managers and Windows Installer remain responsible for files they own. The tool does not reboot the device or remove shared Server state.
 
 This is a recovery utility, not an unattended fleet-management or remote-execution tool. Test it against representative disposable installations before broad deployment. Keep a backup when Agent identity or queued state may be needed for recovery.
+
+## Graphical wizard
+
+The window and header use the PrintMaster Agent printer icon, copied from the main PrintMaster repository's `agent/icon.svg`. The desktop theme follows the system's light/dark preference.
+
+The GUI has four stages with navigation controls outside the scrollable content:
+
+1. **Scan** welcomes you with an overview and an explicit **Scan this device** action. Scanning inventories known installations without changing the device.
+2. **Select** presents compact installation cards, expandable paths and identification evidence, removal-blocking unknown entries, and the optional data purge. Technical inventory JSON and the CLI scan command are under **Advanced diagnostics**.
+3. **Review** shows a compact action summary and the data preservation or permanent purge policy. Expand **View full removal details** for exact targets and reasons. Go back to change the selection, or hold **Hold to Confirm** for 3 seconds to apply the plan automatically when the button fills, without any additional confirmation.
+4. **Results** reports completion or errors, lets you copy the result, and offers a fresh scan to verify remaining installations.
+
+A typical single-installation flow fits without scrolling at window sizes of 900 × 760 or larger with the standard text scale and details collapsed. Expanded details, multiple installations, long errors, smaller windows, or larger text may require scrolling; navigation stays visible.
+
+The same Fyne desktop GUI is built for Windows x64, Linux x64, and macOS Intel/Apple Silicon. Linux requires a graphical desktop session and the graphics libraries required by Fyne; use the CLI on headless hosts. Only Windows automatically requests elevation. On Linux and macOS, a non-root GUI scan is read-only and removal requires relaunching with root privileges in an environment that permits graphical applications. Native GUI behavior should be validated on each target platform; macOS cleanup coverage remains best-effort.
 
 ## Recognized installation families
 

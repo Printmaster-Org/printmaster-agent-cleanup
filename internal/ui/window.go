@@ -7,8 +7,11 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/Printmaster-Org/printmaster-agent-cleanup/internal/cleanup"
 )
@@ -18,195 +21,316 @@ type installChoice struct {
 	check *widget.Check
 }
 
+func wrappedLabel(text string) *widget.Label {
+	label := widget.NewLabel(text)
+	label.Wrapping = fyne.TextWrapWord
+	return label
+}
+
 func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
+	app.Settings().SetTheme(cleanupTheme{Theme: theme.DefaultTheme()})
+	app.SetIcon(appIcon)
 	window := app.NewWindow("PrintMaster Agent Cleanup")
-	window.Resize(fyne.NewSize(900, 760))
+	window.SetIcon(appIcon)
+	window.Resize(fyne.NewSize(960, 820))
 
-	heading := widget.NewLabelWithStyle("PrintMaster Agent Cleanup", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	subtitle := widget.NewLabel("Scan first. Nothing is changed until you review and confirm a removal plan.")
-	status := widget.NewLabel("Preparing inventory…")
+	heading := widget.NewRichText(&widget.TextSegment{
+		Text: "Agent cleanup", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameHeadingText},
+	})
+	brand := widget.NewLabel("PRINTMASTER  /  RECOVERY TOOLS")
+	brand.Importance = widget.LowImportance
+	logo := canvas.NewImageFromResource(appIcon)
+	logo.FillMode = canvas.ImageFillContain
+	logo.SetMinSize(fyne.NewSize(44, 44))
+	pageTitle := widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	stepLabels := []*widget.Label{
+		widget.NewLabel("01  Scan"), widget.NewLabel("02  Select"),
+		widget.NewLabel("03  Review"), widget.NewLabel("04  Results"),
+	}
+	stepObjects := make([]fyne.CanvasObject, len(stepLabels))
+	for i, label := range stepLabels {
+		stepObjects[i] = label
+	}
+	status := wrappedLabel("")
+	body := container.NewStack()
+	actions := container.NewStack()
+	window.SetContent(inset(container.NewBorder(
+		container.NewVBox(
+			container.NewBorder(nil, nil, container.NewHBox(logo), brand, heading),
+			container.NewGridWithColumns(4, stepObjects...), widget.NewSeparator(), pageTitle, status,
+		),
+		container.NewVBox(widget.NewSeparator(), inset(actions, 6)), nil, nil, body,
+	), 20))
 
-	installList := container.NewVBox()
-	unknownList := container.NewVBox()
-	results := widget.NewMultiLineEntry()
-	results.SetPlaceHolder("Detailed inventory evidence appears here.")
-	results.Disable()
-	dataCheck := widget.NewCheck("Also purge Agent configuration, identity, database, credentials, logs, and update trust", nil)
-	dataCheck.SetChecked(false)
-	dataCheck.Disable()
-	removeButton := widget.NewButton("Remove selected Agent installs", nil)
-	removeButton.Disable()
-	scanButton := widget.NewButton("Scan this device", nil)
-	choices := make([]installChoice, 0)
 	var current cleanup.Inventory
-	var scanning, removing bool
+	var selected cleanup.Inventory
+	var plan cleanup.Plan
+	var choices []installChoice
+	var scanning, removing, reviewing bool
+	var scan, showSelection, showReview func()
+	var resultsText string
 
-	updateRemoveEnabled := func() {
-		selected := false
-		for _, choice := range choices {
-			selected = selected || choice.check.Checked
+	setPage := func(step string, content fyne.CanvasObject, buttons ...fyne.CanvasObject) {
+		for i, label := range stepLabels {
+			label.Importance = widget.LowImportance
+			label.TextStyle.Bold = false
+			if strings.HasPrefix(step, fmt.Sprint(i+1)+".") {
+				label.Importance = widget.HighImportance
+				label.TextStyle.Bold = true
+			}
+			label.Refresh()
 		}
-		removeButton.Disable()
-		if selected && len(current.Unrecognized) == 0 && backend.IsElevated() && !scanning && !removing {
-			removeButton.Enable()
+		body.Objects = []fyne.CanvasObject{content}
+		if len(buttons) == 1 {
+			actions.Objects = []fyne.CanvasObject{container.NewHBox(layout.NewSpacer(), buttons[0])}
+		} else {
+			actions.Objects = []fyne.CanvasObject{container.NewBorder(nil, nil,
+				container.NewHBox(buttons[:len(buttons)-1]...), buttons[len(buttons)-1], nil)}
 		}
+		body.Refresh()
+		actions.Refresh()
+		pageTitle.SetText(step)
 	}
 
-	var scan func()
-	scan = func() {
-		if scanning || removing {
+	showResults := func(message, details string) {
+		resultsText = details
+		rescan := widget.NewButton("Scan again", func() { scan() })
+		copyReport := widget.NewButton("Copy result", func() {
+			app.Clipboard().SetContent(resultsText)
+		})
+		setPage("4. Results", container.NewVScroll(container.NewVBox(
+			section("Cleanup result", message),
+			section("Details", "", wrappedLabel(details)),
+			wrappedLabel("Scan again to verify what remains before reinstalling the Agent."),
+		)), copyReport, rescan)
+	}
+
+	apply := func() {
+		if removing || scanning || !reviewing {
 			return
 		}
-		scanning = true
-		status.SetText("Scanning known Agent installations…")
-		scanButton.Disable()
-		removeButton.Disable()
-		dataCheck.Disable()
+		if !backend.IsElevated() {
+			dialog.ShowError(fmt.Errorf("removal requires administrator/root privileges"), window)
+			return
+		}
+		removing = true
+		reviewing = false
+		status.SetText("Removal in progress. Do not close this window.")
+		progress := widget.NewProgressBarInfinite()
+		progress.Start()
+		wait := widget.NewButton("Removing...", nil)
+		wait.Disable()
+		setPage("3. Review · Removing", container.NewVBox(
+			wrappedLabel("Applying the reviewed removal plan..."), progress,
+		), wait)
 		go func() {
-			inventory, err := backend.Scan(context.Background())
+			err := cleanup.ApplyPlan(context.Background(), backend, selected, plan, true)
 			fyne.Do(func() {
-				scanning = false
-				installList.Objects = nil
-				unknownList.Objects = nil
-				choices = nil
+				progress.Stop()
+				removing = false
 				if err != nil {
-					status.SetText("Scan failed")
-					results.SetText(err.Error())
-					scanButton.Enable()
+					status.SetText("Removal stopped. Review the error and rescan.")
+					showResults("Cleanup did not complete", err.Error())
 					return
 				}
-				current = inventory
-				if len(inventory.Installations) == 0 {
-					installList.Add(widget.NewLabel("No known Agent installations found."))
-				}
-				for index, installation := range inventory.Installations {
-					label := fmt.Sprintf("%s · %s", installation.LayoutID, installation.Method)
-					if installation.Version != "" {
-						label += " · " + installation.Version
-					}
-					check := widget.NewCheck(label, func(bool) { updateRemoveEnabled() })
-					check.SetChecked(true)
-					paths := append(append(append([]string{}, installation.Executables...), installation.ConfigPaths...), installation.DataPaths...)
-					paths = append(paths, installation.LogPaths...)
-					if len(installation.Processes) > 0 {
-						for _, process := range installation.Processes {
-							paths = append(paths, fmt.Sprintf("process %d · %s", process.PID, process.Path))
-						}
-					}
-					installList.Add(container.NewVBox(check, widget.NewLabel(strings.Join(paths, "\n")), widget.NewLabel(strings.Join(installation.Evidence, "\n"))))
-					choices = append(choices, installChoice{index: index, check: check})
-				}
-				for _, entry := range inventory.Unrecognized {
-					details := append([]string{fmt.Sprintf("%s · %s · %s", entry.Kind, entry.Name, entry.Reason)}, entry.Evidence...)
-					unknownList.Add(widget.NewLabel(strings.Join(details, "\n")))
-				}
-				if len(inventory.Unrecognized) > 0 {
-					status.SetText("Review required · unknown entries block removal")
-				} else if !backend.IsElevated() {
-					status.SetText("Scan complete · reopen as Administrator/root to remove")
-				} else {
-					status.SetText(fmt.Sprintf("Scan complete · %d recognized installation(s)", len(inventory.Installations)))
-					if len(inventory.Installations) > 0 {
-						dataCheck.Enable()
-					}
-				}
-				dataCheck.SetChecked(false)
-				results.SetText(inventoryJSON(inventory))
-				scanButton.Enable()
-				installList.Refresh()
-				unknownList.Refresh()
-				updateRemoveEnabled()
+				status.SetText("Removal completed.")
+				showResults("Cleanup completed", "Removal completed. The selected data policy was honored. Scan again to verify what remains.")
 			})
 		}()
 	}
 
-	scanButton.OnTapped = scan
-	removeButton.OnTapped = func() {
-		selected := cleanup.Inventory{Platform: current.Platform, Installations: make([]cleanup.Installation, 0)}
+	showReview = func() {
+		selected = cleanup.Inventory{Platform: current.Platform, Unrecognized: current.Unrecognized}
 		for _, choice := range choices {
 			if choice.check.Checked {
 				selected.Installations = append(selected.Installations, current.Installations[choice.index])
 			}
 		}
-		selected.Unrecognized = append(selected.Unrecognized, current.Unrecognized...)
-		plan, err := cleanup.BuildPlan(selected, dataCheck.Checked)
+		var err error
+		plan, err = cleanup.BuildPlan(selected, plan.PurgeData)
 		if err != nil {
 			dialog.ShowError(err, window)
 			return
 		}
 		if len(plan.Actions) == 0 {
-			status.SetText("Nothing selected for removal")
+			dialog.ShowInformation("Nothing to remove", "Select an installation with removable components.", window)
 			return
 		}
-		var summary strings.Builder
+		reviewing = true
+		policy := "Your Agent data will be preserved, including configuration, identity, credentials, and history."
+		if plan.PurgeData {
+			policy = "PERMANENT DATA PURGE: Configuration, identity, databases, credentials, logs, and update trust will be deleted. This cannot be undone."
+		}
+		actionList := container.NewVBox()
+		counts := make(map[cleanup.ActionKind]int)
+		var kinds []cleanup.ActionKind
 		for _, action := range plan.Actions {
-			fmt.Fprintf(&summary, "• %s: %s\n", action.Kind, action.Target)
+			if counts[action.Kind] == 0 {
+				kinds = append(kinds, action.Kind)
+			}
+			counts[action.Kind]++
+			actionList.Add(container.NewVBox(
+				widget.NewLabelWithStyle(strings.ReplaceAll(string(action.Kind), "-", " "), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+				wrappedLabel(action.Target), wrappedLabel(action.Reason), widget.NewSeparator(),
+			))
 		}
-		if plan.PurgeData {
-			summary.WriteString("\nAgent data purge is included and cannot be undone.\n")
-		} else {
-			summary.WriteString("\nAgent data will be preserved.\n")
+		var summary []string
+		for _, kind := range kinds {
+			summary = append(summary, fmt.Sprintf("%d × %s", counts[kind], strings.ReplaceAll(string(kind), "-", " ")))
 		}
-		confirm := func() {
-			dialog.ShowConfirm("Confirm Agent removal", summary.String(), func(confirmed bool) {
-				if !confirmed {
-					return
-				}
-				if !backend.IsElevated() {
-					status.SetText("Removal requires administrator/root privileges")
-					return
-				}
-				removing = true
-				status.SetText("Removal in progress…")
-				scanButton.Disable()
-				removeButton.Disable()
-				go func() {
-					err := cleanup.ApplyPlan(context.Background(), backend, selected, plan, true)
-					fyne.Do(func() {
-						removing = false
-						if err != nil {
-							status.SetText("Removal stopped; review error and rescan")
-							results.SetText(err.Error())
-						} else {
-							status.SetText("Removal completed. Rescan before reinstalling.")
-							results.SetText("Removal completed. Data policy was honored. Rescan to verify what remains.")
-						}
-						scanButton.Enable()
-						removeButton.Disable()
-					})
-				}()
-			}, window)
-		}
-		if plan.PurgeData {
-			showPurgeConfirmation(window, confirm)
-		} else {
-			confirm()
-		}
+		remove := newHoldButton(apply)
+		back := widget.NewButton("Back to selection", func() {
+			remove.cancel()
+			showSelection()
+		})
+		status.SetText("Ready to remove. Nothing has been changed yet.")
+		setPage("3. Review", container.NewVScroll(container.NewVBox(
+			section("Confirm removal",
+				fmt.Sprintf("%d installation(s) selected · %d planned action(s)", len(selected.Installations), len(plan.Actions)),
+				wrappedLabel(strings.Join(summary, "  ·  ")),
+			),
+			section("Data policy", policy),
+			wrappedLabel("Hold for 3 seconds. Removal starts when the button fills. Release early to cancel. Keyboard: hold Space."),
+			widget.NewAccordion(widget.NewAccordionItem("View full removal details", actionList)),
+		)), back, remove)
 	}
 
-	copyCommand := widget.NewButton("Copy CLI scan command", func() {
-		command := "agent-cleanup scan --json"
-		app.Clipboard().SetContent(command)
-		status.SetText("Copied: " + command)
-	})
+	showSelection = func() {
+		reviewing = false
+		installList := container.NewVBox()
+		unknownList := container.NewVBox()
+		review := widget.NewButton("Review removal plan", func() { showReview() })
+		review.Importance = widget.HighImportance
+		updateReview := func() {
+			hasSelection := false
+			for _, choice := range choices {
+				hasSelection = hasSelection || choice.check.Checked
+			}
+			review.Disable()
+			if hasSelection && len(current.Unrecognized) == 0 && backend.IsElevated() {
+				review.Enable()
+			}
+		}
+		if choices == nil {
+			for index, installation := range current.Installations {
+				label := "Remove this installation"
+				if installation.Version != "" {
+					label += " · " + installation.Version
+				}
+				check := widget.NewCheck(label, func(bool) { updateReview() })
+				check.SetChecked(true)
+				choices = append(choices, installChoice{index: index, check: check})
+			}
+		}
+		for _, choice := range choices {
+			choice.check.OnChanged = func(bool) { updateReview() }
+			installation := current.Installations[choice.index]
+			paths := append(append(append([]string{}, installation.Executables...), installation.ConfigPaths...), installation.DataPaths...)
+			paths = append(paths, installation.LogPaths...)
+			for _, process := range installation.Processes {
+				paths = append(paths, fmt.Sprintf("process %d · %s", process.PID, process.Path))
+			}
+			details := container.NewVBox(
+				wrappedLabel("Layout: "+installation.LayoutID),
+				wrappedLabel(strings.Join(paths, "\n")),
+				wrappedLabel(strings.Join(installation.Evidence, "\n")),
+			)
+			summary := fmt.Sprintf("Installation type: %s", installation.Method)
+			if installation.Version != "" {
+				summary += "  ·  Version: " + installation.Version
+			}
+			if installation.ServiceName != "" {
+				summary += "  ·  Service: " + installation.ServiceName
+			}
+			installList.Add(section("PrintMaster Agent", summary,
+				choice.check,
+				widget.NewAccordion(widget.NewAccordionItem("Paths and identification evidence", details)),
+			))
+		}
+		if len(current.Installations) == 0 {
+			installList.Add(wrappedLabel("No known Agent installations found."))
+		}
+		for _, entry := range current.Unrecognized {
+			details := append([]string{entry.Reason, entry.Path}, entry.Evidence...)
+			unknownList.Add(section(entry.Kind+" · "+entry.Name, "", wrappedLabel(strings.Join(details, "\n"))))
+		}
+		if len(current.Unrecognized) > 0 {
+			status.SetText("Review required: unrecognized entries block all removal.")
+		} else if !backend.IsElevated() {
+			status.SetText("Read-only scan. Reopen as Administrator/root to remove installations.")
+		} else {
+			status.SetText(fmt.Sprintf("Scan complete · %d recognized installation(s)", len(current.Installations)))
+		}
+		dataCheck := widget.NewCheck("Permanently purge Agent data", func(checked bool) { plan.PurgeData = checked })
+		dataCheck.SetChecked(plan.PurgeData)
+		if len(current.Installations) == 0 || len(current.Unrecognized) > 0 || !backend.IsElevated() {
+			dataCheck.Disable()
+		}
+		content := container.NewVBox(
+			installList,
+			section("Keep your data", "Agent data is preserved by default. Purge permanently deletes configuration, identity, databases, credentials, logs, and update trust.",
+				dataCheck,
+			),
+		)
+		if len(current.Unrecognized) > 0 {
+			content.Add(widget.NewLabelWithStyle("Unrecognized entries · removal blocked", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+			content.Add(unknownList)
+		}
+		copyCommand := widget.NewButton("Copy CLI scan command", func() { app.Clipboard().SetContent("agent-cleanup scan --json") })
+		copyCommand.Importance = widget.LowImportance
+		content.Add(widget.NewAccordion(widget.NewAccordionItem("Advanced diagnostics", container.NewVBox(
+			copyCommand, wrappedLabel(inventoryJSON(current)),
+		))))
+		updateReview()
+		setPage("2. Select", container.NewVScroll(content),
+			widget.NewButton("Scan again", func() { scan() }),
+			review)
+	}
 
-	content := container.NewVBox(
-		heading,
-		subtitle,
-		container.NewHBox(scanButton, copyCommand),
-		status,
-		widget.NewSeparator(),
-		widget.NewLabelWithStyle("Recognized installations", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		installList,
-		dataCheck,
-		widget.NewLabelWithStyle("Unrecognized entries (report-only)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		unknownList,
-		removeButton,
-		widget.NewLabelWithStyle("Inventory details", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		results,
-	)
-	window.SetContent(container.NewScroll(content))
-	scan()
+	scan = func() {
+		if scanning || removing {
+			return
+		}
+		scanning = true
+		reviewing = false
+		choices = nil
+		plan = cleanup.Plan{}
+		status.SetText("Scanning known Agent installations...")
+		progress := widget.NewProgressBarInfinite()
+		progress.Start()
+		wait := widget.NewButton("Scanning...", nil)
+		wait.Disable()
+		setPage("1. Scan", container.NewVBox(
+			wrappedLabel("Checking known Agent installations, services, processes, and data locations. Nothing is being changed."),
+			progress,
+		), wait)
+		go func() {
+			inventory, err := backend.Scan(context.Background())
+			fyne.Do(func() {
+				progress.Stop()
+				scanning = false
+				if err != nil {
+					status.SetText("Scan failed. No cleanup actions were performed.")
+					showResults("Unable to scan this device", err.Error())
+					return
+				}
+				current = inventory
+				showSelection()
+			})
+		}()
+	}
+
+	start := widget.NewButtonWithIcon("Scan this device", theme.SearchIcon(), func() { scan() })
+	start.Importance = widget.HighImportance
+	status.SetText("Ready when you are. Start with a read-only scan.")
+	setPage("1. Scan", container.NewVScroll(container.NewVBox(
+		section("A clean start for your Agent", "Find and remove known PrintMaster Agent installations without guessing which files belong to them.",
+			wrappedLabel("01  Scan for known installations and services."),
+			wrappedLabel("02  Select installations and choose whether to keep their data."),
+			wrappedLabel("03  Review the plan, then hold to confirm removal."),
+		),
+		section("You are in control", "Opening this tool does not scan or change your device. Unknown installations block removal, and Agent data is preserved by default."),
+	)), start)
 	return window
 }
 
@@ -216,22 +340,4 @@ func inventoryJSON(inventory cleanup.Inventory) string {
 		return err.Error()
 	}
 	return string(data)
-}
-
-func showPurgeConfirmation(parent fyne.Window, onConfirmed func()) {
-	entry := widget.NewEntry()
-	entry.SetPlaceHolder("PURGE PRINTMASTER AGENT DATA")
-	form := dialog.NewForm("Confirm permanent data purge", "Review purge", "Cancel",
-		[]*widget.FormItem{widget.NewFormItem("Type the exact phrase to continue", entry)},
-		func(confirmed bool) {
-			if !confirmed {
-				return
-			}
-			if entry.Text != "PURGE PRINTMASTER AGENT DATA" {
-				dialog.ShowError(fmt.Errorf("confirmation phrase did not match; no data was purged"), parent)
-				return
-			}
-			onConfirmed()
-		}, parent)
-	form.Show()
 }
