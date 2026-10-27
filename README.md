@@ -23,7 +23,7 @@ The scanner checks known paths and native ownership metadata rather than searchi
 
 | Platform | Recognized families |
 | --- | --- |
-| Windows | Current and versioned legacy MSI products matching the PrintMaster Agent UpgradeCode; the Server bootstrap binary under `%ProgramData%`; legacy service/raw binaries under PrintMaster Program Files locations; and the current user's LocalAppData Agent layout. |
+| Windows | Current and versioned legacy MSI products matching the PrintMaster Agent UpgradeCode; the Server bootstrap binary under `%ProgramData%` (including its exact non-MSI `PrintMasterAgent` uninstall entry when publisher, install location, and both uninstall commands match); legacy service/raw binaries under PrintMaster Program Files locations; and the current user's LocalAppData Agent layout. |
 | Linux | `printmaster-agent` DEB/RPM packages; legacy `pm-agent` and `printmaster-agent` direct binaries under `/usr/local/bin`; known systemd units executing those exact binaries; and the current user's `.local` binary/data layout. |
 | macOS | Known `/usr/local/bin` and Homebrew binaries, the system LaunchDaemon, the current user's LaunchAgent, and the current user's supported interactive data layout. |
 

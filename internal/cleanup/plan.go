@@ -60,6 +60,10 @@ func BuildPlan(inventory Inventory, purgeData bool) (Plan, error) {
 		default:
 			return Plan{}, fmt.Errorf("layout %q has unsupported install method %q", install.LayoutID, install.Method)
 		}
+		if install.UninstallKey != "" {
+			add(install, ActionRemoveUninstallEntry, install.UninstallKey,
+				"remove the exact recognized legacy Agent uninstall registration", true)
+		}
 		for _, process := range install.Processes {
 			if process.PID == 0 {
 				return Plan{}, fmt.Errorf("layout %q contains a process without a PID", install.LayoutID)
@@ -104,12 +108,14 @@ func actionOrder(kind ActionKind) int {
 		return 3
 	case ActionRemoveExecutable:
 		return 4
-	case ActionPurgeConfig:
+	case ActionRemoveUninstallEntry:
 		return 5
-	case ActionPurgeData:
+	case ActionPurgeConfig:
 		return 6
-	case ActionPurgeLogs:
+	case ActionPurgeData:
 		return 7
+	case ActionPurgeLogs:
+		return 8
 	default:
 		return 100
 	}

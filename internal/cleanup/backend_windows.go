@@ -164,9 +164,28 @@ func (windowsBackend) Scan(ctx context.Context) (Inventory, error) {
 		if entry.KnownUpgradeCodeProduct {
 			continue
 		}
+		if executable, matched := knownBootstrapUninstallExecutable(entry, programData); matched {
+			attached := false
+			for index := range inventory.Installations {
+				if hasExecutable([]Installation{inventory.Installations[index]}, executable) {
+					inventory.Installations[index].UninstallKey = entry.FullRegistryPath()
+					inventory.Installations[index].Evidence = append(inventory.Installations[index].Evidence,
+						"recognized legacy bootstrap uninstall entry="+entry.FullRegistryPath())
+					attached = true
+				}
+			}
+			if attached {
+				continue
+			}
+			inventory.Unrecognized = append(inventory.Unrecognized, UnrecognizedEntry{
+				Kind: "uninstall-entry", Name: entry.DisplayName, Path: entry.FullRegistryPath(),
+				Reason: "recognized bootstrap uninstall entry has no matching installed executable",
+			})
+			continue
+		}
 		inventory.Unrecognized = append(inventory.Unrecognized, UnrecognizedEntry{
-			Kind: "uninstall-entry", Name: entry.DisplayName, Path: entry.RegistryPath,
-			Reason: "Agent-named uninstall entry does not match the known MSI UpgradeCode; inspect manually",
+			Kind: "uninstall-entry", Name: entry.DisplayName, Path: entry.FullRegistryPath(),
+			Reason: "Agent-named uninstall entry does not match a known MSI product or the exact legacy bootstrap identity",
 		})
 	}
 
@@ -203,6 +222,8 @@ func (windowsBackend) Execute(ctx context.Context, action Action) error {
 		return stopWindowsProcess(ctx, action.Target, action.ProcessPath)
 	case ActionRemoveService:
 		return removeWindowsService(action.Target)
+	case ActionRemoveUninstallEntry:
+		return removeKnownBootstrapUninstallEntry(ctx, action.Target)
 	case ActionUninstallMSI:
 		return uninstallMSI(ctx, action.Target)
 	case ActionRemoveExecutable:
@@ -269,9 +290,20 @@ type msiProduct struct {
 
 type windowsUninstallEntry struct {
 	DisplayName             string
+	RegistryHive            string
 	RegistryPath            string
 	ProductCode             string
+	Publisher               string
+	InstallLocation         string
+	UninstallString         string
+	QuietUninstallString    string
+	WindowsInstaller        bool
+	WindowsInstallerKnown   bool
 	KnownUpgradeCodeProduct bool
+}
+
+func (entry windowsUninstallEntry) FullRegistryPath() string {
+	return entry.RegistryHive + `\` + entry.RegistryPath
 }
 
 func enumerateAgentMSIProducts() ([]msiProduct, error) {
@@ -562,21 +594,130 @@ func uninstallEntries() ([]windowsUninstallEntry, error) {
 			entryPath := uninstallRoot.path + `\` + name
 			entry, err := registry.OpenKey(uninstallRoot.root, entryPath, registry.READ)
 			if err != nil {
-				entries = append(entries, windowsUninstallEntry{DisplayName: "unreadable uninstall entry " + name, RegistryPath: entryPath, KnownUpgradeCodeProduct: false})
+				entries = append(entries, windowsUninstallEntry{DisplayName: "unreadable uninstall entry " + name,
+					RegistryHive: registryHiveName(uninstallRoot.root), RegistryPath: entryPath})
 				continue
 			}
-			displayName, _, _ := entry.GetStringValue("DisplayName")
+			candidate := windowsUninstallEntry{RegistryHive: registryHiveName(uninstallRoot.root), RegistryPath: entryPath}
+			candidate.DisplayName = uninstallStringValue(entry, "DisplayName")
+			candidate.Publisher = uninstallStringValue(entry, "Publisher")
+			candidate.InstallLocation = uninstallStringValue(entry, "InstallLocation")
+			candidate.UninstallString = uninstallStringValue(entry, "UninstallString")
+			candidate.QuietUninstallString = uninstallStringValue(entry, "QuietUninstallString")
+			windowsInstaller, _, valueErr := entry.GetIntegerValue("WindowsInstaller")
+			candidate.WindowsInstallerKnown = errors.Is(valueErr, registry.ErrNotExist) || valueErr == nil
+			candidate.WindowsInstaller = windowsInstaller != 0
 			entry.Close()
-			lower := strings.ToLower(displayName)
+			lower := strings.ToLower(candidate.DisplayName)
 			if !strings.Contains(lower, "printmaster") || !strings.Contains(lower, "agent") {
 				continue
 			}
 			if _, ok := knownProducts[strings.ToUpper(name)]; !ok {
-				entries = append(entries, windowsUninstallEntry{DisplayName: displayName, RegistryPath: entryPath, ProductCode: name, KnownUpgradeCodeProduct: false})
+				candidate.ProductCode = name
+				entries = append(entries, candidate)
 			}
 		}
 	}
 	return entries, nil
+}
+
+func registryHiveName(root registry.Key) string {
+	if root == registry.LOCAL_MACHINE {
+		return "HKLM"
+	}
+	if root == registry.CURRENT_USER {
+		return "HKCU"
+	}
+	return ""
+}
+
+func uninstallStringValue(key registry.Key, name string) string {
+	value, _, _ := key.GetStringValue(name)
+	return value
+}
+
+func knownBootstrapUninstallExecutable(entry windowsUninstallEntry, programData string) (string, bool) {
+	const expectedKey = `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PrintMasterAgent`
+	if !strings.EqualFold(entry.RegistryHive, "HKLM") || !strings.EqualFold(entry.RegistryPath, expectedKey) {
+		return "", false
+	}
+	if !strings.EqualFold(entry.DisplayName, "PrintMaster Agent") || !strings.EqualFold(entry.Publisher, "PrintMaster") ||
+		!entry.WindowsInstallerKnown || entry.WindowsInstaller {
+		return "", false
+	}
+	expectedDirectory := filepath.Join(programData, "PrintMaster", "bin")
+	if !strings.EqualFold(filepath.Clean(entry.InstallLocation), filepath.Clean(expectedDirectory)) {
+		return "", false
+	}
+	expectedExecutable := filepath.Join(expectedDirectory, "printmaster-agent.exe")
+	if !matchesBootstrapUninstallCommand(entry.UninstallString, expectedExecutable, false) ||
+		!matchesBootstrapUninstallCommand(entry.QuietUninstallString, expectedExecutable, true) {
+		return "", false
+	}
+	return expectedExecutable, true
+}
+
+func matchesBootstrapUninstallCommand(command, expectedExecutable string, quiet bool) bool {
+	arguments, err := windows.DecomposeCommandLine(command)
+	if err != nil {
+		return false
+	}
+	want := []string{expectedExecutable, "--service", "uninstall"}
+	if quiet {
+		want = append(want, "--silent")
+	}
+	if len(arguments) != len(want) || !strings.EqualFold(filepath.Clean(arguments[0]), filepath.Clean(want[0])) {
+		return false
+	}
+	for index := 1; index < len(want); index++ {
+		if !strings.EqualFold(arguments[index], want[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func removeKnownBootstrapUninstallEntry(ctx context.Context, fullPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	const expectedPath = `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PrintMasterAgent`
+	if !strings.EqualFold(fullPath, `HKLM\`+expectedPath) {
+		return fmt.Errorf("refusing unrecognized uninstall registry key %q", fullPath)
+	}
+	entry, err := readBootstrapUninstallEntry(expectedPath)
+	if err != nil {
+		return err
+	}
+	programData := os.Getenv("ProgramData")
+	if programData == "" {
+		programData = `C:\ProgramData`
+	}
+	if _, matched := knownBootstrapUninstallExecutable(entry, programData); !matched {
+		return fmt.Errorf("legacy Agent uninstall entry changed since scan; refusing to remove %q", fullPath)
+	}
+	if err := registry.DeleteKey(registry.LOCAL_MACHINE, expectedPath); err != nil && !errors.Is(err, registry.ErrNotExist) {
+		return fmt.Errorf("remove legacy Agent uninstall registry key: %w", err)
+	}
+	return nil
+}
+
+func readBootstrapUninstallEntry(path string) (windowsUninstallEntry, error) {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, path, registry.READ)
+	if err != nil {
+		return windowsUninstallEntry{}, err
+	}
+	defer key.Close()
+	entry := windowsUninstallEntry{RegistryHive: "HKLM", RegistryPath: path}
+	entry.DisplayName = uninstallStringValue(key, "DisplayName")
+	entry.Publisher = uninstallStringValue(key, "Publisher")
+	entry.InstallLocation = uninstallStringValue(key, "InstallLocation")
+	entry.UninstallString = uninstallStringValue(key, "UninstallString")
+	entry.QuietUninstallString = uninstallStringValue(key, "QuietUninstallString")
+	windowsInstaller, _, valueErr := key.GetIntegerValue("WindowsInstaller")
+	entry.WindowsInstallerKnown = errors.Is(valueErr, registry.ErrNotExist) || valueErr == nil
+	entry.WindowsInstaller = windowsInstaller != 0
+	return entry, nil
 }
 
 func mustWindowsRoots() []string {

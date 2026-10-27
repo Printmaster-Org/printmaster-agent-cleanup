@@ -54,6 +54,7 @@ type Installation struct {
 	ServiceName    string    `json:"service_name,omitempty"`
 	ServiceScope   string    `json:"service_scope,omitempty"`
 	ServicePlist   string    `json:"service_plist,omitempty"`
+	UninstallKey   string    `json:"uninstall_key,omitempty"`
 	Executables    []string  `json:"executables,omitempty"`
 	Processes      []Process `json:"processes,omitempty"`
 	ConfigPaths    []string  `json:"config_paths,omitempty"`
@@ -88,15 +89,16 @@ type Inventory struct {
 type ActionKind string
 
 const (
-	ActionStopService      ActionKind = "stop-service"
-	ActionStopProcess      ActionKind = "stop-process"
-	ActionUninstallMSI     ActionKind = "uninstall-msi"
-	ActionRemovePackage    ActionKind = "remove-package"
-	ActionRemoveService    ActionKind = "remove-service"
-	ActionRemoveExecutable ActionKind = "remove-executable"
-	ActionPurgeConfig      ActionKind = "purge-config"
-	ActionPurgeData        ActionKind = "purge-data"
-	ActionPurgeLogs        ActionKind = "purge-logs"
+	ActionStopService          ActionKind = "stop-service"
+	ActionStopProcess          ActionKind = "stop-process"
+	ActionUninstallMSI         ActionKind = "uninstall-msi"
+	ActionRemovePackage        ActionKind = "remove-package"
+	ActionRemoveService        ActionKind = "remove-service"
+	ActionRemoveUninstallEntry ActionKind = "remove-uninstall-entry"
+	ActionRemoveExecutable     ActionKind = "remove-executable"
+	ActionPurgeConfig          ActionKind = "purge-config"
+	ActionPurgeData            ActionKind = "purge-data"
+	ActionPurgeLogs            ActionKind = "purge-logs"
 )
 
 // Action is an explicit, reviewable operation. Destructive data actions are

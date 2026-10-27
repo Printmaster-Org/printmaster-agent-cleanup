@@ -116,6 +116,27 @@ func TestBuildPlanPackageRemovalDoesNotInvokePurge(t *testing.T) {
 	}
 }
 
+func TestBuildPlanRemovesOnlyRecognizedUninstallEntry(t *testing.T) {
+	inventory := Inventory{Platform: PlatformWindows, Installations: []Installation{{
+		LayoutID: "windows-bootstrap-bin", Method: MethodRawBinary,
+		Executables:  []string{`C:\ProgramData\PrintMaster\bin\printmaster-agent.exe`},
+		UninstallKey: `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PrintMasterAgent`,
+	}}}
+	plan, err := BuildPlan(inventory, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, action := range plan.Actions {
+		if action.Kind == ActionRemoveUninstallEntry {
+			found = action.Target == inventory.Installations[0].UninstallKey
+		}
+	}
+	if !found {
+		t.Fatalf("plan omitted the recognized legacy uninstall key: %+v", plan.Actions)
+	}
+}
+
 func TestBuildPlanRejectsAmbiguousInstallOwner(t *testing.T) {
 	inventory := Inventory{Platform: PlatformWindows, Installations: []Installation{{
 		LayoutID: "ambiguous", Method: MethodMSI,
