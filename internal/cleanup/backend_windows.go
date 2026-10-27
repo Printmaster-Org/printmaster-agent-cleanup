@@ -115,8 +115,10 @@ func (windowsBackend) Scan(ctx context.Context) (Inventory, error) {
 		if err := ctx.Err(); err != nil {
 			return Inventory{}, err
 		}
-		if !pathExists(root) {
+		if _, err := os.Lstat(root); errors.Is(err, os.ErrNotExist) {
 			continue
+		} else if err != nil {
+			return Inventory{}, fmt.Errorf("inspect Agent scan root %s: %w", root, err)
 		}
 		if strings.EqualFold(filepath.Clean(root), filepath.Clean(filepath.Join(programData, "PrintMaster", "agent"))) {
 			continue
@@ -209,7 +211,8 @@ func (windowsBackend) Scan(ctx context.Context) (Inventory, error) {
 			})
 		}
 	}
-	if err := inventoryWindowsRemnants(&inventory, programData); err != nil {
+	directories := windowsEmptyInstallDirectories(programData, programFiles, programFilesX86)
+	if err := inventoryWindowsRemnants(&inventory, programData, directories[1:]...); err != nil {
 		return Inventory{}, err
 	}
 	return inventory, nil
@@ -233,7 +236,7 @@ func (windowsBackend) Execute(ctx context.Context, action Action) error {
 	case ActionRemoveExecutable:
 		return removeKnownExecutable(action.Target)
 	case ActionRemoveEmptyDirectory:
-		return removeWindowsBootstrapDirectory(action.Target)
+		return removeWindowsEmptyInstallDirectory(action.Target)
 	case ActionPurgeConfig:
 		if !isKnownWindowsConfigPath(action.Target) {
 			return fmt.Errorf("refusing unrecognized Agent configuration path %q", action.Target)

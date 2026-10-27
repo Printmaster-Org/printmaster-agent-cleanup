@@ -87,7 +87,7 @@ func BuildPlan(inventory Inventory, purgeData bool) (Plan, error) {
 			}
 		}
 		for _, directory := range install.EmptyDirectories {
-			add(install, ActionRemoveEmptyDirectory, directory, "remove the known bootstrap directory only if empty; never delete remaining files", true)
+			add(install, ActionRemoveEmptyDirectory, directory, "remove the known Agent installation directory only if empty; never delete remaining files", true)
 		}
 	}
 	if len(inventory.Unrecognized) > 0 {
