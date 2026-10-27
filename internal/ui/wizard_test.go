@@ -63,10 +63,12 @@ func wizardBackend() *uiTestBackend {
 func assertCompletionCheck(t *testing.T, window fyne.Window, want bool) {
 	t.Helper()
 	found := false
+	var checkCenter float32
 	for _, object := range renderedObjects(window.Content()) {
 		if image, ok := object.(*canvas.Image); ok && image.Resource != nil &&
 			image.Resource.Name() == theme.NewSuccessThemedResource(theme.ConfirmIcon()).Name() {
 			found = true
+			checkCenter = fyne.CurrentApp().Driver().AbsolutePositionForObject(image).X + image.Size().Width/2
 			if image.MinSize().Width < 80 || image.MinSize().Height < 80 {
 				t.Fatal("completion check should be prominent")
 			}
@@ -74,6 +76,30 @@ func assertCompletionCheck(t *testing.T, window fyne.Window, want bool) {
 	}
 	if found != want {
 		t.Fatalf("success check visible=%t, want %t", found, want)
+	}
+	if !want {
+		return
+	}
+	foundTitle := false
+	for _, object := range renderedObjects(window.Content()) {
+		if title, ok := object.(*widget.RichText); ok && (title.String() == "Nothing to clean up" || title.String() == "All cleaned up") {
+			foundTitle = true
+			for _, child := range renderedObjects(title) {
+				if text, ok := child.(*canvas.Text); ok && text.Text == title.String() {
+					if text.Alignment != fyne.TextAlignCenter {
+						t.Fatal("completion heading glyphs must be center-aligned")
+					}
+					center := fyne.CurrentApp().Driver().AbsolutePositionForObject(title).X + text.Position().X + text.Size().Width/2
+					offset := center - checkCenter
+					if offset < -1 || offset > 1 {
+						t.Fatalf("completion heading is not centered beneath check: heading=%g check=%g", center, checkCenter)
+					}
+				}
+			}
+		}
+	}
+	if !foundTitle {
+		t.Fatal("rendered completion heading not found")
 	}
 }
 

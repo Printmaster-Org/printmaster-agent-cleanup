@@ -130,10 +130,12 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 			summary.Add(container.NewCenter(check))
 		}
 		title := widget.NewRichText(&widget.TextSegment{
-			Text: message, Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameHeadingText},
+			Text: message, Style: widget.RichTextStyle{
+				Alignment: fyne.TextAlignCenter, TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameHeadingText,
+			},
 		})
 		title.Wrapping = fyne.TextWrapWord
-		summary.Add(container.NewCenter(title))
+		summary.Add(title)
 		description := wrappedLabel(details)
 		description.Alignment = fyne.TextAlignCenter
 		summary.Add(description)
