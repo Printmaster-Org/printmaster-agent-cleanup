@@ -72,11 +72,12 @@ type Process struct {
 // UnrecognizedEntry is report-only evidence that needs owner review. It is
 // deliberately excluded from generated cleanup actions.
 type UnrecognizedEntry struct {
-	Kind   string `json:"kind"`
-	Name   string `json:"name"`
-	Path   string `json:"path,omitempty"`
-	Reason string `json:"reason"`
-	PID    uint32 `json:"pid,omitempty"`
+	Kind     string   `json:"kind"`
+	Name     string   `json:"name"`
+	Path     string   `json:"path,omitempty"`
+	Reason   string   `json:"reason"`
+	Evidence []string `json:"evidence,omitempty"`
+	PID      uint32   `json:"pid,omitempty"`
 }
 
 // Inventory contains recognized installations and report-only unknowns.

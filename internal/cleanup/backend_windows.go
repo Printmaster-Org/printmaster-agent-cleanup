@@ -185,7 +185,8 @@ func (windowsBackend) Scan(ctx context.Context) (Inventory, error) {
 		}
 		inventory.Unrecognized = append(inventory.Unrecognized, UnrecognizedEntry{
 			Kind: "uninstall-entry", Name: entry.DisplayName, Path: entry.FullRegistryPath(),
-			Reason: "Agent-named uninstall entry does not match a known MSI product or the exact legacy bootstrap identity",
+			Reason:   "Agent-named uninstall entry does not match a known MSI product or the exact legacy bootstrap identity",
+			Evidence: uninstallEntryEvidence(entry),
 		})
 	}
 
@@ -634,6 +635,16 @@ func registryHiveName(root registry.Key) string {
 func uninstallStringValue(key registry.Key, name string) string {
 	value, _, _ := key.GetStringValue(name)
 	return value
+}
+
+func uninstallEntryEvidence(entry windowsUninstallEntry) []string {
+	return []string{
+		fmt.Sprintf("publisher=%q", entry.Publisher),
+		fmt.Sprintf("install location=%q", entry.InstallLocation),
+		fmt.Sprintf("WindowsInstaller=%t (known=%t)", entry.WindowsInstaller, entry.WindowsInstallerKnown),
+		fmt.Sprintf("uninstall command=%q", entry.UninstallString),
+		fmt.Sprintf("quiet uninstall command=%q", entry.QuietUninstallString),
+	}
 }
 
 func knownBootstrapUninstallExecutable(entry windowsUninstallEntry, programData string) (string, bool) {

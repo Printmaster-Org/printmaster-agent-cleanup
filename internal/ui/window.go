@@ -97,7 +97,8 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 					choices = append(choices, installChoice{index: index, check: check})
 				}
 				for _, entry := range inventory.Unrecognized {
-					unknownList.Add(widget.NewLabel(fmt.Sprintf("%s · %s · %s", entry.Kind, entry.Name, entry.Reason)))
+					details := append([]string{fmt.Sprintf("%s · %s · %s", entry.Kind, entry.Name, entry.Reason)}, entry.Evidence...)
+					unknownList.Add(widget.NewLabel(strings.Join(details, "\n")))
 				}
 				if len(inventory.Unrecognized) > 0 {
 					status.SetText("Review required · unknown entries block removal")

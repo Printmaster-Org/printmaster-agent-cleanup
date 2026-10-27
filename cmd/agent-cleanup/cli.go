@@ -91,6 +91,9 @@ func printInventory(output io.Writer, inventory cleanup.Inventory) error {
 	}
 	for _, unknown := range inventory.Unrecognized {
 		fmt.Fprintf(output, "\n? %s %s: %s\n  %s\n", unknown.Kind, unknown.Name, unknown.Path, unknown.Reason)
+		for _, evidence := range unknown.Evidence {
+			fmt.Fprintf(output, "  evidence: %s\n", evidence)
+		}
 	}
 	return nil
 }
