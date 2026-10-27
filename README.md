@@ -2,6 +2,8 @@
 
 PrintMaster Agent Cleanup is a standalone recovery utility for removing known legacy and current PrintMaster Agent installations. It starts with a graphical scan-and-review wizard; explicit CLI commands are available for automation and remote support.
 
+See the [cleanup utility guide](https://docs.printmaster.work/deployment/agent-cleanup/) for downloads, illustrated instructions, data-purge precautions, and bootstrap recovery. The GUI welcome screen links directly to this guide.
+
 The utility removes only Agent-owned services, package registrations, installer registrations, and executable files it can positively identify. Agent configuration, identity, databases, credentials, logs, and update trust are preserved unless data purge is explicitly selected. Shared PrintMaster Server directories and accounts are outside its scope.
 
 ## Safety model
@@ -26,7 +28,7 @@ The GUI has four stages with navigation controls outside the scrollable content:
 1. **Scan** welcomes you with an overview and an explicit **Scan this device** action. Scanning inventories known installations without changing the device.
 2. **Select** presents compact installation cards, expandable paths and identification evidence, removal-blocking unknown entries, and the optional data purge. Technical inventory JSON and the CLI scan command are under **Advanced diagnostics**.
 3. **Review** shows a compact action summary and the data preservation or permanent purge policy. Expand **View full removal details** for exact targets and reasons. Go back to change the selection, or hold **Hold to Confirm** for 3 seconds to apply the plan automatically when the button fills, without any additional confirmation.
-4. **Results** reports completion or errors, lets you copy the result, and offers a fresh scan to verify remaining installations.
+4. **Done** reports completion or errors, lets you copy the result, and links to the PrintMaster website, documentation, and GitHub support. **Return to start** returns to the step 1 welcome screen without automatically scanning; click **Scan this device** when ready to verify remaining installations.
 
 A typical single-installation flow fits without scrolling at window sizes of 900 × 760 or larger with the standard text scale and details collapsed. Expanded details, multiple installations, long errors, smaller windows, or larger text may require scrolling; navigation stays visible.
 

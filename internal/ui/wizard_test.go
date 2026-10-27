@@ -67,13 +67,20 @@ func TestWizardStartsAtWelcomeWithoutScanning(t *testing.T) {
 	window.Show()
 	waitForPage(t, window, "1. Scan")
 	hasLogo := false
+	hasGuide := false
 	for _, object := range renderedObjects(window.Content()) {
 		if image, ok := object.(*canvas.Image); ok && image.Resource == appIcon {
 			hasLogo = true
 		}
+		if link, ok := object.(*widget.Hyperlink); ok && link.URL.String() == "https://docs.printmaster.work/deployment/agent-cleanup/" {
+			hasGuide = true
+		}
 	}
 	if !hasLogo {
 		t.Fatal("wizard header must display the PrintMaster logo")
+	}
+	if !hasGuide {
+		t.Fatal("welcome screen must link to the cleanup utility guide")
 	}
 	select {
 	case <-backend.scanned:
@@ -155,7 +162,7 @@ func TestWizardReviewAndResults(t *testing.T) {
 			if window.Canvas().Overlays().Top() != nil {
 				t.Fatal("hold must start removal without another confirmation")
 			}
-			waitForPage(t, window, "4. Results")
+			waitForPage(t, window, "4. Done")
 			expected := 1
 			if scenario.purge {
 				expected = 2
@@ -166,11 +173,31 @@ func TestWizardReviewAndResults(t *testing.T) {
 			if scenario.err != nil {
 				waitForPage(t, window, scenario.err.Error())
 			}
+			links := make(map[string]string)
+			for _, object := range renderedObjects(window.Content()) {
+				if link, ok := object.(*widget.Hyperlink); ok {
+					links[link.Text] = link.URL.String()
+				}
+			}
+			for label, target := range map[string]string{
+				"PrintMaster website": "https://printmaster.work",
+				"Documentation":       "https://docs.printmaster.work",
+				"Support / GitHub":    "https://github.com/Printmaster-Org/printmaster",
+			} {
+				if links[label] != target {
+					t.Fatalf("Done page link %q = %q, want %q", label, links[label], target)
+				}
+			}
 			tapWizardButton(t, window.Content(), "Copy result")
 			if application.Clipboard().Content() == "" {
 				t.Fatal("copy result produced no report")
 			}
-			tapWizardButton(t, window.Content(), "Scan again")
+			tapWizardButton(t, window.Content(), "Return to start")
+			waitForPage(t, window, "1. Scan")
+			if backend.scanCalls != 1 {
+				t.Fatal("returning to start must not automatically rescan")
+			}
+			tapWizardButton(t, window.Content(), "Scan this device")
 			waitForPage(t, window, "2. Select")
 		})
 	}
@@ -317,7 +344,7 @@ func TestSingleInstallationPagesFitWithoutScrolling(t *testing.T) {
 				assertPageFits(t, window)
 				button.started = time.Now().Add(-purgeHoldDuration)
 				button.complete(button.started)
-				waitForPage(t, window, "4. Results")
+				waitForPage(t, window, "4. Done")
 				assertPageFits(t, window)
 			})
 		}

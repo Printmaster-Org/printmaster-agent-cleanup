@@ -22,12 +22,14 @@ type uiTestBackend struct {
 	scanned      chan struct{}
 	actions      []cleanup.Action
 	scanOnce     sync.Once
+	scanCalls    int
 	scanError    error
 	executeError error
 	readOnly     bool
 }
 
 func (b *uiTestBackend) Scan(context.Context) (cleanup.Inventory, error) {
+	b.scanCalls++
 	b.scanOnce.Do(func() { close(b.scanned) })
 	return b.inventory, b.scanError
 }

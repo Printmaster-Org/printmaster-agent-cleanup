@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -27,6 +28,16 @@ func wrappedLabel(text string) *widget.Label {
 	return label
 }
 
+func resourceLink(app fyne.App, window fyne.Window, label string, target *url.URL) *widget.Hyperlink {
+	link := widget.NewHyperlink(label, target)
+	link.OnTapped = func() {
+		if err := app.OpenURL(target); err != nil {
+			dialog.ShowError(fmt.Errorf("open %s: %w", target, err), window)
+		}
+	}
+	return link
+}
+
 func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 	app.Settings().SetTheme(cleanupTheme{Theme: theme.DefaultTheme()})
 	app.SetIcon(appIcon)
@@ -45,7 +56,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 	pageTitle := widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	stepLabels := []*widget.Label{
 		widget.NewLabel("01  Scan"), widget.NewLabel("02  Select"),
-		widget.NewLabel("03  Review"), widget.NewLabel("04  Results"),
+		widget.NewLabel("03  Review"), widget.NewLabel("04  Done"),
 	}
 	stepObjects := make([]fyne.CanvasObject, len(stepLabels))
 	for i, label := range stepLabels {
@@ -67,7 +78,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 	var plan cleanup.Plan
 	var choices []installChoice
 	var scanning, removing, reviewing bool
-	var scan, showSelection, showReview func()
+	var scan, showSelection, showReview, showStart func()
 	var resultsText string
 
 	setPage := func(step string, content fyne.CanvasObject, buttons ...fyne.CanvasObject) {
@@ -94,15 +105,25 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 
 	showResults := func(message, details string) {
 		resultsText = details
-		rescan := widget.NewButton("Scan again", func() { scan() })
+		restart := widget.NewButton("Return to start", func() { showStart() })
+		restart.Importance = widget.HighImportance
 		copyReport := widget.NewButton("Copy result", func() {
 			app.Clipboard().SetContent(resultsText)
 		})
-		setPage("4. Results", container.NewVScroll(container.NewVBox(
-			section("Cleanup result", message),
-			section("Details", "", wrappedLabel(details)),
-			wrappedLabel("Scan again to verify what remains before reinstalling the Agent."),
-		)), copyReport, rescan)
+		links := container.NewHBox()
+		for _, resource := range []struct{ label, host, path string }{
+			{"PrintMaster website", "printmaster.work", ""},
+			{"Documentation", "docs.printmaster.work", ""},
+			{"Support / GitHub", "github.com", "/Printmaster-Org/printmaster"},
+		} {
+			target := &url.URL{Scheme: "https", Host: resource.host, Path: resource.path}
+			links.Add(resourceLink(app, window, resource.label, target))
+		}
+		setPage("4. Done", container.NewVScroll(container.NewVBox(
+			section(message, details),
+			section("What's next?", "Visit PrintMaster for installation guidance and help.", links),
+			wrappedLabel("Return to start for another scan to verify what remains, or close this window when finished."),
+		)), copyReport, restart)
 	}
 
 	apply := func() {
@@ -134,7 +155,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 					return
 				}
 				status.SetText("Removal completed.")
-				showResults("Cleanup completed", "Removal completed. The selected data policy was honored. Scan again to verify what remains.")
+				showResults("Cleanup completed", "Removal completed. The selected data policy was honored.")
 			})
 		}()
 	}
@@ -227,6 +248,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 			installation := current.Installations[choice.index]
 			paths := append(append(append([]string{}, installation.Executables...), installation.ConfigPaths...), installation.DataPaths...)
 			paths = append(paths, installation.LogPaths...)
+			paths = append(paths, installation.EmptyDirectories...)
 			for _, process := range installation.Processes {
 				paths = append(paths, fmt.Sprintf("process %d · %s", process.PID, process.Path))
 			}
@@ -242,7 +264,11 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 			if installation.ServiceName != "" {
 				summary += "  ·  Service: " + installation.ServiceName
 			}
-			installList.Add(section("PrintMaster Agent", summary,
+			title := "PrintMaster Agent"
+			if len(installation.Executables) == 0 && installation.ServiceName == "" && installation.Method == cleanup.MethodInteractive {
+				title = "Leftover Agent files / directories"
+			}
+			installList.Add(section(title, summary,
 				choice.check,
 				widget.NewAccordion(widget.NewAccordionItem("Paths and identification evidence", details)),
 			))
@@ -320,17 +346,28 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 		}()
 	}
 
-	start := widget.NewButtonWithIcon("Scan this device", theme.SearchIcon(), func() { scan() })
-	start.Importance = widget.HighImportance
-	status.SetText("Ready when you are. Start with a read-only scan.")
-	setPage("1. Scan", container.NewVScroll(container.NewVBox(
-		section("A clean start for your Agent", "Find and remove known PrintMaster Agent installations without guessing which files belong to them.",
-			wrappedLabel("01  Scan for known installations and services."),
-			wrappedLabel("02  Select installations and choose whether to keep their data."),
-			wrappedLabel("03  Review the plan, then hold to confirm removal."),
-		),
-		section("You are in control", "Opening this tool does not scan or change your device. Unknown installations block removal, and Agent data is preserved by default."),
-	)), start)
+	showStart = func() {
+		current = cleanup.Inventory{}
+		selected = cleanup.Inventory{}
+		plan = cleanup.Plan{}
+		choices = nil
+		reviewing = false
+		resultsText = ""
+		start := widget.NewButtonWithIcon("Scan this device", theme.SearchIcon(), func() { scan() })
+		start.Importance = widget.HighImportance
+		guide := resourceLink(app, window, "Read the cleanup utility guide",
+			&url.URL{Scheme: "https", Host: "docs.printmaster.work", Path: "/deployment/agent-cleanup/"})
+		status.SetText("Ready when you are. Start with a read-only scan.")
+		setPage("1. Scan", container.NewVScroll(container.NewVBox(
+			section("A clean start for your Agent", "Find and remove known PrintMaster Agent installations without guessing which files belong to them.",
+				wrappedLabel("01  Scan for known installations and services."),
+				wrappedLabel("02  Select installations and choose whether to keep their data."),
+				wrappedLabel("03  Review the plan, then hold to confirm removal."),
+			),
+			section("You are in control", "Opening this tool does not scan or change your device. Unknown installations block removal, and Agent data is preserved by default."),
+		)), guide, start)
+	}
+	showStart()
 	return window
 }
 
