@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/Printmaster-Org/printmaster-agent-cleanup/internal/cleanup"
 )
@@ -56,6 +57,87 @@ func wizardBackend() *uiTestBackend {
 			}},
 		},
 		scanned: make(chan struct{}),
+	}
+}
+
+func assertCompletionCheck(t *testing.T, window fyne.Window, want bool) {
+	t.Helper()
+	found := false
+	for _, object := range renderedObjects(window.Content()) {
+		if image, ok := object.(*canvas.Image); ok && image.Resource != nil &&
+			image.Resource.Name() == theme.NewSuccessThemedResource(theme.ConfirmIcon()).Name() {
+			found = true
+			if image.MinSize().Width < 80 || image.MinSize().Height < 80 {
+				t.Fatal("completion check should be prominent")
+			}
+		}
+	}
+	if found != want {
+		t.Fatalf("success check visible=%t, want %t", found, want)
+	}
+}
+
+func TestWizardCleanScanFinishesWithoutRemoval(t *testing.T) {
+	for _, readOnly := range []bool{false, true} {
+		t.Run(fmt.Sprintf("read_only_%t", readOnly), func(t *testing.T) {
+			application := test.NewTempApp(t)
+			backend := wizardBackend()
+			backend.inventory.Installations = nil
+			backend.readOnly = readOnly
+			window := BuildWindow(application, backend)
+			t.Cleanup(window.Close)
+			window.Resize(fyne.NewSize(900, 760))
+			window.Show()
+			tapWizardButton(t, window.Content(), "Scan this device")
+			waitForPage(t, window, "4. Done")
+			waitForPage(t, window, "Nothing to clean up")
+			assertCompletionCheck(t, window, true)
+			assertPageFits(t, window)
+			for _, object := range renderedObjects(window.Content()) {
+				if _, ok := object.(*widget.Check); ok {
+					t.Fatal("clean scan must not offer removal or purge selections")
+				}
+				if accordion, ok := object.(*widget.Accordion); ok && accordion.Items[0].Open {
+					t.Fatal("scan details should be collapsed")
+				}
+			}
+			tapWizardButton(t, window.Content(), "Copy result")
+			if !strings.Contains(application.Clipboard().Content(), "Scan inventory") {
+				t.Fatal("clean result must retain scan diagnostics")
+			}
+			tapWizardButton(t, window.Content(), "Return to start")
+			waitForPage(t, window, "1. Scan")
+			if backend.scanCalls != 1 || len(backend.actions) != 0 {
+				t.Fatal("clean scan or returning to start mutated the host or rescanned")
+			}
+		})
+	}
+}
+
+func TestWizardDoesNotTreatUnknownsOrLeftoversAsClean(t *testing.T) {
+	for _, unknown := range []bool{false, true} {
+		t.Run(fmt.Sprintf("unknown_%t", unknown), func(t *testing.T) {
+			application := test.NewTempApp(t)
+			backend := wizardBackend()
+			backend.inventory.Installations = nil
+			if unknown {
+				backend.inventory.Unrecognized = []cleanup.UnrecognizedEntry{{Kind: "bootstrap-remnant", Name: "unknown", Reason: "owner review required"}}
+			} else {
+				backend.inventory.Installations = []cleanup.Installation{{
+					LayoutID: "windows-machine-data", Method: cleanup.MethodInteractive,
+					DataPaths: []string{`C:\ProgramData\PrintMaster\agent`},
+				}}
+			}
+			window := BuildWindow(application, backend)
+			t.Cleanup(window.Close)
+			window.Show()
+			tapWizardButton(t, window.Content(), "Scan this device")
+			waitForPage(t, window, "2. Select")
+			assertCompletionCheck(t, window, false)
+			if len(backend.actions) != 0 {
+				t.Fatal("scan changed the device")
+			}
+		})
 	}
 }
 
@@ -172,7 +254,10 @@ func TestWizardReviewAndResults(t *testing.T) {
 			}
 			if scenario.err != nil {
 				waitForPage(t, window, scenario.err.Error())
+			} else {
+				waitForPage(t, window, "All cleaned up")
 			}
+			assertCompletionCheck(t, window, scenario.err == nil)
 			links := make(map[string]string)
 			for _, object := range renderedObjects(window.Content()) {
 				if link, ok := object.(*widget.Hyperlink); ok {
@@ -217,6 +302,7 @@ func TestWizardScanErrorAndReadOnly(t *testing.T) {
 		tapWizardButton(t, window.Content(), "Scan this device")
 		if scanError {
 			waitForPage(t, window, "fixture scan failure")
+			assertCompletionCheck(t, window, false)
 		} else {
 			waitForPage(t, window, "Read-only scan")
 			for _, object := range renderedObjects(window.Content()) {

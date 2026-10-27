@@ -103,8 +103,11 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 		pageTitle.SetText(step)
 	}
 
-	showResults := func(message, details string) {
-		resultsText = details
+	showResults := func(message, details string, success bool) {
+		resultsText = message + "\n" + details
+		if current.Platform != "" {
+			resultsText += "\n\nScan inventory (before any cleanup):\n" + inventoryJSON(current)
+		}
 		restart := widget.NewButton("Return to start", func() { showStart() })
 		restart.Importance = widget.HighImportance
 		copyReport := widget.NewButton("Copy result", func() {
@@ -119,10 +122,25 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 			target := &url.URL{Scheme: "https", Host: resource.host, Path: resource.path}
 			links.Add(resourceLink(app, window, resource.label, target))
 		}
+		summary := container.NewVBox()
+		if success {
+			check := canvas.NewImageFromResource(theme.NewSuccessThemedResource(theme.ConfirmIcon()))
+			check.FillMode = canvas.ImageFillContain
+			check.SetMinSize(fyne.NewSize(80, 80))
+			summary.Add(container.NewCenter(check))
+		}
+		title := widget.NewRichText(&widget.TextSegment{
+			Text: message, Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameHeadingText},
+		})
+		title.Wrapping = fyne.TextWrapWord
+		summary.Add(container.NewCenter(title))
+		description := wrappedLabel(details)
+		description.Alignment = fyne.TextAlignCenter
+		summary.Add(description)
 		setPage("4. Done", container.NewVScroll(container.NewVBox(
-			section(message, details),
-			section("What's next?", "Visit PrintMaster for installation guidance and help.", links),
-			wrappedLabel("Return to start for another scan to verify what remains, or close this window when finished."),
+			widget.NewCard("", "", inset(summary, 12)),
+			container.NewCenter(links),
+			widget.NewAccordion(widget.NewAccordionItem("Scan / result details", wrappedLabel(resultsText))),
 		)), copyReport, restart)
 	}
 
@@ -151,11 +169,15 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 				removing = false
 				if err != nil {
 					status.SetText("Removal stopped. Review the error and rescan.")
-					showResults("Cleanup did not complete", err.Error())
+					showResults("Cleanup did not complete", err.Error(), false)
 					return
 				}
 				status.SetText("Removal completed.")
-				showResults("Cleanup completed", "Removal completed. The selected data policy was honored.")
+				details := "The selected Agent components were removed. Your Agent data was preserved."
+				if plan.PurgeData {
+					details = "The selected Agent components and their selected data were removed."
+				}
+				showResults("All cleaned up", details, true)
 			})
 		}()
 	}
@@ -337,10 +359,15 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 				scanning = false
 				if err != nil {
 					status.SetText("Scan failed. No cleanup actions were performed.")
-					showResults("Unable to scan this device", err.Error())
+					showResults("Unable to scan this device", err.Error(), false)
 					return
 				}
 				current = inventory
+				if len(current.Installations) == 0 && len(current.Unrecognized) == 0 {
+					status.SetText("Scan complete. No changes were made.")
+					showResults("Nothing to clean up", "No known PrintMaster Agent installations or leftover files were detected.", true)
+					return
+				}
 				showSelection()
 			})
 		}()
