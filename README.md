@@ -23,14 +23,14 @@ This is a recovery utility, not an unattended fleet-management or remote-executi
 
 The window and header use the PrintMaster Agent printer icon, copied from the main PrintMaster repository's `agent/icon.svg`. The desktop theme follows the system's light/dark preference.
 
-The GUI has four stages with navigation controls outside the scrollable content:
+The GUI has four stages with centered step and section headings:
 
-1. **Scan** welcomes you with an overview and an explicit **Scan this device** action. Scanning inventories known installations without changing the device.
-2. **Select** presents compact installation cards, expandable paths and identification evidence, removal-blocking unknown entries, and the optional data purge. Technical inventory JSON and the CLI scan command are under **Advanced diagnostics**.
+1. **Start** shows a vertically centered splash-style introduction and **Scan this device** action beneath the **PrintMaster Agent Cleanup Tool** heading. A tinted highlight and blue underline mark the current wizard step. Scanning happens between Start and Select and inventories known installations without changing the device.
+2. **Select** presents installation cards in two columns when there are multiple findings, with expandable paths and identification evidence. The data preservation / optional purge card stays outside the scrolling installation list so it remains visible. Unknown entries block removal. Technical inventory JSON and the CLI scan command are under **Advanced diagnostics**.
 3. **Review** shows a compact action summary and the data preservation or permanent purge policy. Expand **View full removal details** for exact targets and reasons. Go back to change the selection, or hold **Hold to Confirm** for 3 seconds to apply the plan automatically when the button fills, without any additional confirmation.
 4. **Done** shows a large green check with **Nothing to clean up** after a clean scan, or **All cleaned up** after successful removal of the selected components. A clean scan skips Select and Review; unknown entries, leftovers, and scan errors never count as clean. Errors remain explicit and do not show a success check. Scan/result details are collapsed, with **Copy result** and links to the PrintMaster website, documentation, and GitHub support. **Return to start** returns to the step 1 welcome screen without automatically scanning; click **Scan this device** when ready to verify remaining installations.
 
-A typical single-installation flow fits without scrolling at window sizes of 900 × 760 or larger with the standard text scale and details collapsed. Expanded details, multiple installations, long errors, smaller windows, or larger text may require scrolling; navigation stays visible.
+A typical flow with one or two installation cards fits without scrolling at window sizes of 900 × 760 or larger with the standard text scale and details collapsed. Expanded details, additional installations, long errors, smaller windows, or larger text may require scrolling; the selection data policy and removal navigation stay visible.
 
 The same Fyne desktop GUI is built for Windows x64, Linux x64, and macOS Intel/Apple Silicon. Linux requires a graphical desktop session and the graphics libraries required by Fyne; use the CLI on headless hosts. Only Windows automatically requests elevation. On Linux and macOS, a non-root GUI scan is read-only and removal requires relaunching with root privileges in an environment that permits graphical applications. Native GUI behavior should be validated on each target platform; macOS cleanup coverage remains best-effort.
 

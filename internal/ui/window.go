@@ -41,36 +41,36 @@ func resourceLink(app fyne.App, window fyne.Window, label string, target *url.UR
 func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 	app.Settings().SetTheme(cleanupTheme{Theme: theme.DefaultTheme()})
 	app.SetIcon(appIcon)
-	window := app.NewWindow("PrintMaster Agent Cleanup")
+	window := app.NewWindow("PrintMaster Agent Cleanup Tool")
 	window.SetIcon(appIcon)
 	window.Resize(fyne.NewSize(960, 820))
 
 	heading := widget.NewRichText(&widget.TextSegment{
-		Text: "Agent cleanup", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameHeadingText},
+		Text: "PrintMaster Agent Cleanup Tool", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameHeadingText},
 	})
-	brand := widget.NewLabel("PRINTMASTER  /  RECOVERY TOOLS")
-	brand.Importance = widget.LowImportance
+	heading.Wrapping = fyne.TextWrapWord
 	logo := canvas.NewImageFromResource(appIcon)
 	logo.FillMode = canvas.ImageFillContain
 	logo.SetMinSize(fyne.NewSize(44, 44))
-	pageTitle := widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	stepLabels := []*widget.Label{
-		widget.NewLabel("01  Scan"), widget.NewLabel("02  Select"),
-		widget.NewLabel("03  Review"), widget.NewLabel("04  Done"),
+	pageTitle := widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	steps := []*stepIndicator{
+		newStepIndicator("01  Start"), newStepIndicator("02  Select"),
+		newStepIndicator("03  Review"), newStepIndicator("04  Done"),
 	}
-	stepObjects := make([]fyne.CanvasObject, len(stepLabels))
-	for i, label := range stepLabels {
-		stepObjects[i] = label
+	stepObjects := make([]fyne.CanvasObject, len(steps))
+	for i, step := range steps {
+		stepObjects[i] = step
 	}
 	status := wrappedLabel("")
 	body := container.NewStack()
 	actions := container.NewStack()
+	actionSeparator := widget.NewSeparator()
 	window.SetContent(inset(container.NewBorder(
 		container.NewVBox(
-			container.NewBorder(nil, nil, container.NewHBox(logo), brand, heading),
-			container.NewGridWithColumns(4, stepObjects...), widget.NewSeparator(), pageTitle, status,
+			container.NewBorder(nil, nil, container.NewHBox(logo), nil, heading),
+			container.NewGridWithColumns(4, stepObjects...), pageTitle, status,
 		),
-		container.NewVBox(widget.NewSeparator(), inset(actions, 6)), nil, nil, body,
+		container.NewVBox(actionSeparator, inset(actions, 6)), nil, nil, body,
 	), 20))
 
 	var current cleanup.Inventory
@@ -82,19 +82,19 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 	var resultsText string
 
 	setPage := func(step string, content fyne.CanvasObject, buttons ...fyne.CanvasObject) {
-		for i, label := range stepLabels {
-			label.Importance = widget.LowImportance
-			label.TextStyle.Bold = false
-			if strings.HasPrefix(step, fmt.Sprint(i+1)+".") {
-				label.Importance = widget.HighImportance
-				label.TextStyle.Bold = true
-			}
-			label.Refresh()
+		for i, indicator := range steps {
+			indicator.active = strings.HasPrefix(step, fmt.Sprint(i+1)+".")
+			indicator.Refresh()
 		}
 		body.Objects = []fyne.CanvasObject{content}
-		if len(buttons) == 1 {
+		if len(buttons) == 0 {
+			actionSeparator.Hide()
+			actions.Objects = []fyne.CanvasObject{widget.NewLabel("")}
+		} else if len(buttons) == 1 {
+			actionSeparator.Show()
 			actions.Objects = []fyne.CanvasObject{container.NewHBox(layout.NewSpacer(), buttons[0])}
 		} else {
+			actionSeparator.Show()
 			actions.Objects = []fyne.CanvasObject{container.NewBorder(nil, nil,
 				container.NewHBox(buttons[:len(buttons)-1]...), buttons[len(buttons)-1], nil)}
 		}
@@ -243,6 +243,9 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 	showSelection = func() {
 		reviewing = false
 		installList := container.NewVBox()
+		if len(current.Installations) > 1 {
+			installList = container.NewGridWithColumns(2)
+		}
 		unknownList := container.NewVBox()
 		review := widget.NewButton("Review removal plan", func() { showReview() })
 		review.Importance = widget.HighImportance
@@ -316,12 +319,8 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 		if len(current.Installations) == 0 || len(current.Unrecognized) > 0 || !backend.IsElevated() {
 			dataCheck.Disable()
 		}
-		content := container.NewVBox(
-			installList,
-			section("Keep your data", "Agent data is preserved by default. Purge permanently deletes configuration, identity, databases, credentials, logs, and update trust.",
-				dataCheck,
-			),
-		)
+		dataPolicy := section("Keep your data", "Data is preserved by default. Purge permanently deletes Agent configuration, identity, databases, credentials, logs, and update trust.", dataCheck)
+		content := container.NewVBox(installList)
 		if len(current.Unrecognized) > 0 {
 			content.Add(widget.NewLabelWithStyle("Unrecognized entries · removal blocked", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 			content.Add(unknownList)
@@ -332,7 +331,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 			copyCommand, wrappedLabel(inventoryJSON(current)),
 		))))
 		updateReview()
-		setPage("2. Select", container.NewVScroll(content),
+		setPage("2. Select", container.NewBorder(nil, dataPolicy, nil, nil, container.NewVScroll(content)),
 			widget.NewButton("Scan again", func() { scan() }),
 			review)
 	}
@@ -350,7 +349,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 		progress.Start()
 		wait := widget.NewButton("Scanning...", nil)
 		wait.Disable()
-		setPage("1. Scan", container.NewVBox(
+		setPage("1. Start · Scanning", container.NewVBox(
 			wrappedLabel("Checking known Agent installations, services, processes, and data locations. Nothing is being changed."),
 			progress,
 		), wait)
@@ -386,15 +385,17 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 		start.Importance = widget.HighImportance
 		guide := resourceLink(app, window, "Read the cleanup utility guide",
 			&url.URL{Scheme: "https", Host: "docs.printmaster.work", Path: "/deployment/agent-cleanup/"})
-		status.SetText("Ready when you are. Start with a read-only scan.")
-		setPage("1. Scan", container.NewVScroll(container.NewVBox(
-			section("A clean start for your Agent", "Find and remove known PrintMaster Agent installations without guessing which files belong to them.",
-				wrappedLabel("01  Scan for known installations and services."),
-				wrappedLabel("02  Select installations and choose whether to keep their data."),
-				wrappedLabel("03  Review the plan, then hold to confirm removal."),
-			),
-			section("You are in control", "Opening this tool does not scan or change your device. Unknown installations block removal, and Agent data is preserved by default."),
-		)), guide, start)
+		status.SetText("Ready when you are. Nothing has been changed.")
+		description := wrappedLabel("Find known Agent installations and leftover files. Scanning is read-only; you review every removal.")
+		description.Alignment = fyne.TextAlignCenter
+		policy := wrappedLabel("Your Agent data is kept unless you explicitly choose to purge it.")
+		policy.Alignment = fyne.TextAlignCenter
+		splash := container.NewVBox(
+			section("A clean start for your Agent", "", description, policy,
+				inset(container.NewCenter(start), 12)),
+			container.NewCenter(guide),
+		)
+		setPage("1. Start", container.NewVScroll(container.New(verticalCenterLayout{}, splash)))
 	}
 	showStart()
 	return window

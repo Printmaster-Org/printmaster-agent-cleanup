@@ -132,7 +132,7 @@ func TestWizardCleanScanFinishesWithoutRemoval(t *testing.T) {
 				t.Fatal("clean result must retain scan diagnostics")
 			}
 			tapWizardButton(t, window.Content(), "Return to start")
-			waitForPage(t, window, "1. Scan")
+			waitForPage(t, window, "1. Start")
 			if backend.scanCalls != 1 || len(backend.actions) != 0 {
 				t.Fatal("clean scan or returning to start mutated the host or rescanned")
 			}
@@ -173,7 +173,7 @@ func TestWizardStartsAtWelcomeWithoutScanning(t *testing.T) {
 	window := BuildWindow(application, backend)
 	t.Cleanup(window.Close)
 	window.Show()
-	waitForPage(t, window, "1. Scan")
+	waitForPage(t, window, "1. Start")
 	hasLogo := false
 	hasGuide := false
 	for _, object := range renderedObjects(window.Content()) {
@@ -304,7 +304,7 @@ func TestWizardReviewAndResults(t *testing.T) {
 				t.Fatal("copy result produced no report")
 			}
 			tapWizardButton(t, window.Content(), "Return to start")
-			waitForPage(t, window, "1. Scan")
+			waitForPage(t, window, "1. Start")
 			if backend.scanCalls != 1 {
 				t.Fatal("returning to start must not automatically rescan")
 			}
@@ -392,6 +392,12 @@ func assertPageFits(t *testing.T, window fyne.Window) {
 	t.Helper()
 	test.RenderToMarkup(window.Canvas())
 	for _, object := range renderedObjects(window.Content()) {
+		if button, ok := object.(*widget.Button); ok && button.Visible() {
+			position := fyne.CurrentApp().Driver().AbsolutePositionForObject(button)
+			if position.Y+button.Size().Height > window.Canvas().Size().Height+1 {
+				t.Fatalf("button %q is below the window: position=%v size=%v", button.Text, position, button.Size())
+			}
+		}
 		if scroll, ok := object.(*container.Scroll); ok && scroll.Visible() {
 			content, viewport := scroll.Content.Size(), scroll.Size()
 			if content.Height > viewport.Height+1 || content.Width > viewport.Width+1 {

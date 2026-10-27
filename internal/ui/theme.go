@@ -66,9 +66,22 @@ func inset(content fyne.CanvasObject, padding float32) *fyne.Container {
 	return container.New(layout.NewCustomPaddedLayout(padding, padding, padding, padding), content)
 }
 
+type verticalCenterLayout struct{}
+
+func (verticalCenterLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	return objects[0].MinSize()
+}
+
+func (verticalCenterLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	content := objects[0]
+	height := content.MinSize().Height
+	content.Resize(fyne.NewSize(size.Width, height))
+	content.Move(fyne.NewPos(0, max(0, (size.Height-height)/2)))
+}
+
 func section(title, description string, objects ...fyne.CanvasObject) fyne.CanvasObject {
 	titleText := widget.NewRichText(&widget.TextSegment{
-		Text: title, Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameSubHeadingText},
+		Text: title, Style: widget.RichTextStyle{Alignment: fyne.TextAlignCenter, TextStyle: fyne.TextStyle{Bold: true}, SizeName: theme.SizeNameSubHeadingText},
 	})
 	content := container.NewVBox(titleText)
 	if description != "" {
