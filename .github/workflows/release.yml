@@ -56,8 +56,7 @@ jobs:
         run: |
           mkdir -p dist
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            go build -trimpath -ldflags="-H=windowsgui -s -w -X main.defaultMode=gui" -o "dist/agent-cleanup-windows-amd64.exe" ./cmd/agent-cleanup
-            go build -trimpath -ldflags="-s -w -X main.defaultMode=cli" -o "dist/agent-cleanup-cli-windows-amd64.exe" ./cmd/agent-cleanup
+            go build -trimpath -ldflags="-H=windowsgui -s -w" -o "dist/agent-cleanup-windows-amd64.exe" ./cmd/agent-cleanup
           else
             go build -trimpath -ldflags="-s -w" -o "dist/agent-cleanup-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}" ./cmd/agent-cleanup
           fi

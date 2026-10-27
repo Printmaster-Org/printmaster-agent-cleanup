@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,56 @@ var (
 	shellExecuteW = shell32DLL.NewProc("ShellExecuteW")
 	user32DLL     = windows.NewLazySystemDLL("user32.dll")
 	messageBoxW   = user32DLL.NewProc("MessageBoxW")
+	kernel32DLL   = windows.NewLazySystemDLL("kernel32.dll")
+	attachConsole = kernel32DLL.NewProc("AttachConsole")
+	allocConsole  = kernel32DLL.NewProc("AllocConsole")
+	getStdHandle  = kernel32DLL.NewProc("GetStdHandle")
+	getFileType   = kernel32DLL.NewProc("GetFileType")
 )
+
+const (
+	attachParentProcess = uintptr(0xFFFFFFFF)
+	stdOutputHandle     = uintptr(0xFFFFFFF5)
+	stdErrorHandle      = uintptr(0xFFFFFFF4)
+	fileTypeUnknown     = 0
+)
+
+func attachConsoleForCLI() error {
+	stdoutType := standardHandleType(stdOutputHandle)
+	stderrType := standardHandleType(stdErrorHandle)
+	if stdoutType != fileTypeUnknown && stderrType != fileTypeUnknown {
+		return nil
+	}
+	if attached, _, _ := attachConsole.Call(attachParentProcess); attached == 0 && !errors.Is(windows.GetLastError(), windows.ERROR_ACCESS_DENIED) {
+		if created, _, _ := allocConsole.Call(); created == 0 && !errors.Is(windows.GetLastError(), windows.ERROR_ACCESS_DENIED) {
+			return fmt.Errorf("attach CLI to a console: %w", windows.GetLastError())
+		}
+	}
+	if stdoutType == fileTypeUnknown {
+		stdout, err := os.OpenFile("CONOUT$", os.O_WRONLY, 0)
+		if err != nil {
+			return fmt.Errorf("open console output: %w", err)
+		}
+		os.Stdout = stdout
+	}
+	if stderrType == fileTypeUnknown {
+		stderr, err := os.OpenFile("CONOUT$", os.O_WRONLY, 0)
+		if err != nil {
+			return fmt.Errorf("open console error output: %w", err)
+		}
+		os.Stderr = stderr
+	}
+	return nil
+}
+
+func standardHandleType(handleType uintptr) uint32 {
+	handle, _, _ := getStdHandle.Call(handleType)
+	if handle == 0 || handle == ^uintptr(0) {
+		return fileTypeUnknown
+	}
+	fileType, _, _ := getFileType.Call(handle)
+	return uint32(fileType)
+}
 
 func ensureElevatedForGUI() (bool, error) {
 	if windows.GetCurrentProcessToken().IsElevated() {

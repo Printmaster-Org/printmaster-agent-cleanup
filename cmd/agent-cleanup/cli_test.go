@@ -40,32 +40,22 @@ func TestScanIsReadOnlyAndReportsUnknowns(t *testing.T) {
 }
 
 func TestGUIAndCLIEntryModes(t *testing.T) {
-	if !shouldOpenGUI(nil, "gui") || !shouldOpenGUI([]string{"--gui"}, "gui") {
+	if !shouldOpenGUI(nil) || !shouldOpenGUI([]string{"--gui"}) {
 		t.Fatal("GUI default and explicit GUI mode should open the wizard")
 	}
-	if shouldOpenGUI(nil, "cli") || shouldOpenGUI([]string{"scan"}, "gui") {
-		t.Fatal("CLI mode or an explicit CLI command must not open the GUI")
+	if shouldOpenGUI([]string{"scan"}) {
+		t.Fatal("an explicit CLI command must not open the GUI")
 	}
 }
 
 func TestHelpTextDescribesDefaultLaunchMode(t *testing.T) {
 	var output strings.Builder
-	defaultMode = "gui"
 	if err := runCLI([]string{"help"}, &testBackend{}, &output); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "No arguments opens the graphical cleanup wizard.") {
 		t.Fatal("GUI help does not describe the default launch")
 	}
-	output.Reset()
-	defaultMode = "cli"
-	if err := runCLI([]string{"help"}, &testBackend{}, &output); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(output.String(), "No arguments displays this help.") {
-		t.Fatal("CLI help does not describe the default launch")
-	}
-	defaultMode = "gui"
 }
 
 func TestRemoveRequiresYesAndElevation(t *testing.T) {

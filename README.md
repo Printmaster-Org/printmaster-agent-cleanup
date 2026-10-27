@@ -55,7 +55,7 @@ On headless Linux development environments without CGO or graphics libraries, Fy
 CGO_ENABLED=0 go test -tags ci ./...
 ```
 
-Native release builds are made on Windows, Linux, and macOS runners. Release assets are named by platform and architecture, and `SHA256SUMS` is published alongside them. Windows releases provide a windowed `agent-cleanup-windows-amd64.exe` GUI and a separate `agent-cleanup-cli-windows-amd64.exe` console executable.
+Native release builds are made on Windows, Linux, and macOS runners. Release assets are named by platform and architecture, and `SHA256SUMS` is published alongside them. Windows has one windowed `agent-cleanup-windows-amd64.exe`: no arguments open the GUI without a console, while CLI arguments attach to the launching console when available and preserve redirected output.
 
 ## Recovery notes
 
