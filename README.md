@@ -21,7 +21,7 @@ This is a recovery utility, not an unattended fleet-management or remote-executi
 
 ## Graphical wizard
 
-The window opens centered on its monitor. The window and header use the PrintMaster Agent printer icon, copied from the main PrintMaster repository's `agent/icon.svg`. The desktop theme follows the system's light/dark preference.
+The window opens centered on its monitor. The window and header use the PrintMaster Agent printer icon, copied from the main PrintMaster repository's `agent/icon.svg`. Windows executables also embed multi-resolution printer icons for the shell and taskbar. The desktop theme follows the system's light/dark preference.
 
 The GUI has four stages with centered step and section headings:
 
@@ -73,6 +73,8 @@ CGO_ENABLED=0 go test -tags ci ./...
 ```
 
 Native release builds are made on Windows, Linux, and macOS runners. Release assets are named by platform and architecture, and `SHA256SUMS` is published alongside them. Windows has one windowed `agent-cleanup-windows-amd64.exe`: no arguments open the GUI without a console, while CLI arguments attach to the launching console when available and preserve redirected output.
+
+The checked-in `cmd/agent-cleanup/resource_windows_amd64.syso` embeds the Windows shell icon in ordinary Go builds. After changing `internal/ui/icon.svg`, run `go generate ./cmd/agent-cleanup` on Windows with MinGW `windres` on PATH and commit the regenerated resource. CI and release builds regenerate it from the SVG before building; Windows tests verify all seven icon sizes are linked into the executable.
 
 ## Recovery notes
 

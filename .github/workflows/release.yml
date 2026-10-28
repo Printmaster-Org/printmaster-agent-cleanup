@@ -48,6 +48,9 @@ jobs:
           msystem: UCRT64
           update: true
           install: mingw-w64-ucrt-x86_64-gcc
+      - name: Generate Windows executable icon
+        if: runner.os == 'Windows'
+        run: go generate ./cmd/agent-cleanup
       - name: Build native executable
         shell: bash
         env:
