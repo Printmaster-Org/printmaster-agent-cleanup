@@ -21,7 +21,7 @@ This is a recovery utility, not an unattended fleet-management or remote-executi
 
 ## Graphical wizard
 
-The window and header use the PrintMaster Agent printer icon, copied from the main PrintMaster repository's `agent/icon.svg`. The desktop theme follows the system's light/dark preference.
+The window opens centered on its monitor. The window and header use the PrintMaster Agent printer icon, copied from the main PrintMaster repository's `agent/icon.svg`. The desktop theme follows the system's light/dark preference.
 
 The GUI has four stages with centered step and section headings:
 

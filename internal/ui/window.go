@@ -398,6 +398,7 @@ func BuildWindow(app fyne.App, backend cleanup.Backend) fyne.Window {
 		setPage("1. Start", container.NewVScroll(container.New(verticalCenterLayout{}, splash)))
 	}
 	showStart()
+	window.CenterOnScreen()
 	return window
 }
 
